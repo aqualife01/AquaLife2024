@@ -1,8 +1,6 @@
-// src/types.ts
 export type RootStackParamList = {
-    Home: undefined;
-    Login: undefined;
-    Dashboard: undefined;
-    Register: undefined;
-  };
-  
+  Home: undefined;
+  Login: undefined;
+  Register: undefined;
+  DashboardDrawer: undefined; // Importante
+};

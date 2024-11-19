@@ -11,6 +11,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { globalStyles } from '../styles/globalStyles';
 
+
 // Especifica el tipo de navegación para LoginScreen
 type LoginScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -28,8 +29,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const handleLogin = () => {
     // Simulación de inicio de sesión
     alert('Inicio de sesión exitoso');
-    navigation.navigate('Dashboard'); // Navega al Dashboard
+    navigation.navigate('DashboardDrawer'); // Asegúrate de que coincide con el nombre de la ruta en App.tsx
   };
+
+
 
   return (
     <View style={[globalStyles.container, styles.outerContainer]}>
@@ -61,10 +64,11 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         {/* Botón de Ingresar */}
         <TouchableOpacity
           style={globalStyles.primaryButton}
-          onPress={() => navigation.navigate('Dashboard')}
+          onPress={() => navigation.navigate('DashboardDrawer')} // Redirige al Drawer
         >
           <Text style={globalStyles.primaryButtonText}>Ingresar</Text>
         </TouchableOpacity>
+
 
         {/* Botón de Registro */}
         <View style={styles.registerContainer}>
