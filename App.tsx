@@ -32,9 +32,10 @@ const DashboardDrawer = () => {
       }}
     >
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
+      <Drawer.Screen name="User" component={UserScreen} />
       <Drawer.Screen name="Sales" component={SalesScreen} />
       <Drawer.Screen name="Stats" component={StatsScreen} />
-      <Drawer.Screen name="User" component={UserScreen} />
+      
       <Drawer.Screen name="Inventory" component={InventoryScreen} />
       <Drawer.Screen name="Maintenance" component={MaintenanceScreen} />
       <Drawer.Screen name="Invoices" component={InvoicesScreen} />

@@ -1,6 +1,7 @@
-import firebase from 'firebase/app';
-import 'firebase/auth';
-import 'firebase/firestore';
+// firebaseConfig.ts
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBs-F5DsK-jlEPoCZkaVsXJBwt91OBoEBg",
@@ -11,8 +12,8 @@ const firebaseConfig = {
   appId: "1:642616945035:web:YOUR_APP_ID"  // Reemplaza "YOUR_APP_ID" con tu ID de aplicación si lo tienes.
 };
 
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
+const app = initializeApp(firebaseConfig);
 
-export { firebase };
+// Exportar Firestore y Auth
+export const db = getFirestore(app);
+export const auth = getAuth(app);

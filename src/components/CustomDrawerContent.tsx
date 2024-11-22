@@ -13,6 +13,10 @@ const CustomDrawerContent = (props: any) => {
         onPress={() => props.navigation.navigate('Dashboard')}
       />
       <DrawerItem
+        label="Usuario"
+        onPress={() => props.navigation.navigate('User')}
+      />
+      <DrawerItem
         label="Ventas"
         onPress={() => props.navigation.navigate('Sales')}
       />
@@ -20,10 +24,7 @@ const CustomDrawerContent = (props: any) => {
         label="Estadísticas"
         onPress={() => props.navigation.navigate('Stats')}
       />
-      <DrawerItem
-        label="Usuario"
-        onPress={() => props.navigation.navigate('User')}
-      />
+      
       <DrawerItem
         label="Inventario"
         onPress={() => props.navigation.navigate('Inventory')}
