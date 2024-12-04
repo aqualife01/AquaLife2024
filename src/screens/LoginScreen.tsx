@@ -5,12 +5,13 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  Alert,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { globalStyles } from '../styles/globalStyles';
-
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import app from '../../firebaseConfig';
 
 // Especifica el tipo de navegación para LoginScreen
 type LoginScreenNavigationProp = StackNavigationProp<
@@ -26,13 +27,17 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = () => {
-    // Simulación de inicio de sesión
-    alert('Inicio de sesión exitoso');
-    navigation.navigate('DashboardDrawer'); // Asegúrate de que coincide con el nombre de la ruta en App.tsx
+  const handleLogin = async () => {
+    const auth = getAuth(app); // Inicializa Firebase Auth
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      Alert.alert('Inicio de sesión exitoso', 'Accediendo...');
+      navigation.navigate('DashboardDrawer'); // Asegúrate de que coincide con el nombre de la ruta
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert('Error de inicio de sesión', error.message);
+    }
   };
-
-
 
   return (
     <View style={[globalStyles.container, styles.outerContainer]}>
@@ -49,6 +54,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           placeholderTextColor="#888888"
           value={email}
           onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
 
         {/* Campo de Contraseña */}
@@ -64,11 +71,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         {/* Botón de Ingresar */}
         <TouchableOpacity
           style={globalStyles.primaryButton}
-          onPress={() => navigation.navigate('DashboardDrawer')} // Redirige al Drawer
+          onPress={handleLogin}
         >
           <Text style={globalStyles.primaryButtonText}>Ingresar</Text>
         </TouchableOpacity>
-
 
         {/* Botón de Registro */}
         <View style={styles.registerContainer}>
@@ -84,18 +90,18 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   outerContainer: {
-    justifyContent: 'center', // Centra el contenido verticalmente
-    alignItems: 'center', // Centra el contenido horizontalmente
-    backgroundColor: '#F5F5F5', // Fondo más claro para el contenedor externo
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
   },
   innerContainer: {
-    width: '90%', // Ajusta el ancho del cuadro
-    maxWidth: 400, // Máximo tamaño para pantallas grandes
-    padding: 20, // Espaciado interno
-    backgroundColor: '#FFFFFF', // Fondo blanco para el cuadro
-    borderRadius: 10, // Bordes redondeados
-    elevation: 5, // Sombra para Android
-    shadowColor: '#000', // Sombra para iOS
+    width: '90%',
+    maxWidth: 400,
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    elevation: 5,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 5,
