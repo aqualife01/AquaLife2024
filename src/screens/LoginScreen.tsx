@@ -5,13 +5,14 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { globalStyles } from '../styles/globalStyles';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import app from '../../firebaseConfig';
+import Toast from 'react-native-toast-message';
 
 // Especifica el tipo de navegación para LoginScreen
 type LoginScreenNavigationProp = StackNavigationProp<
@@ -26,65 +27,126 @@ interface Props {
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    const auth = getAuth(app); // Inicializa Firebase Auth
+    if (!email || !password) {
+      showToast('error', 'Por favor ingresa correo y contraseña.');
+      return;
+    }
+
+    const auth = getAuth(app);
+    setLoading(true);
+
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert('Inicio de sesión exitoso', 'Accediendo...');
-      navigation.navigate('DashboardDrawer'); // Asegúrate de que coincide con el nombre de la ruta
+      setLoading(false);
+      showToast('success', 'Inicio de sesión exitoso. Accediendo...');
+      navigation.navigate('DashboardDrawer');
     } catch (error: any) {
-      console.error(error);
-      Alert.alert('Error de inicio de sesión', error.message);
+      setLoading(false);
+
+      // Manejo de errores con mensajes específicos
+      switch (error.code) {
+        case 'auth/user-not-found':
+          showToastWithAction(
+            'error',
+            'El correo no está registrado.',
+            '¿Registrarse?',
+            () => navigation.navigate('Register')
+          );
+          break;
+        case 'auth/wrong-password':
+          showToast('error', 'Correo o contraseña incorrectos.');
+          break;
+        case 'auth/invalid-email':
+          showToast('error', 'El formato del correo no es válido.');
+          break;
+        default:
+          showToast('error', 'Ha ocurrido un error. Inténtalo de nuevo.');
+      }
     }
   };
 
+  const showToast = (type: 'success' | 'error', message: string) => {
+    Toast.show({
+      type,
+      text1: type === 'success' ? '¡Éxito!' : 'Error',
+      text2: message,
+      position: 'top',
+      visibilityTime: 3000,
+    });
+  };
+
+  const showToastWithAction = (
+    type: 'success' | 'error',
+    message: string,
+    actionText: string,
+    actionCallback: () => void
+  ) => {
+    Toast.show({
+      type,
+      text1: type === 'success' ? '¡Éxito!' : 'Error',
+      text2: message,
+      position: 'top',
+      visibilityTime: 4000,
+      onPress: actionCallback, // Llama a la acción si el usuario toca el mensaje
+      props: { actionText },
+    });
+  };
+
   return (
-    <View style={[globalStyles.container, styles.outerContainer]}>
-      {/* Contenedor centralizado */}
-      <View style={styles.innerContainer}>
-        <Text style={[globalStyles.title, styles.titleText]}>
-          Iniciar Sesión
-        </Text>
+    <>
+      <View style={[globalStyles.container, styles.outerContainer]}>
+        <View style={styles.innerContainer}>
+          <Text style={[globalStyles.title, styles.titleText]}>
+            Iniciar Sesión
+          </Text>
 
-        {/* Campo de Email */}
-        <TextInput
-          style={[globalStyles.input, styles.input]}
-          placeholder="Email"
-          placeholderTextColor="#888888"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
+          {/* Campo de Email */}
+          <TextInput
+            style={[globalStyles.input, styles.input]}
+            placeholder="Email"
+            placeholderTextColor="#888888"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
 
-        {/* Campo de Contraseña */}
-        <TextInput
-          style={[globalStyles.input, styles.input]}
-          placeholder="Contraseña"
-          placeholderTextColor="#888888"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+          {/* Campo de Contraseña */}
+          <TextInput
+            style={[globalStyles.input, styles.input]}
+            placeholder="Contraseña"
+            placeholderTextColor="#888888"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
 
-        {/* Botón de Ingresar */}
-        <TouchableOpacity
-          style={globalStyles.primaryButton}
-          onPress={handleLogin}
-        >
-          <Text style={globalStyles.primaryButtonText}>Ingresar</Text>
-        </TouchableOpacity>
+          {/* Mensaje de comprobando */}
+          {loading && <ActivityIndicator size="large" color="#00B5E2" />}
 
-        {/* Botón de Registro */}
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>¿No tienes cuenta?</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={styles.registerLink}>Regístrate</Text>
+          {/* Botón de Ingresar */}
+          <TouchableOpacity
+            style={globalStyles.primaryButton}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            <Text style={globalStyles.primaryButtonText}>Ingresar</Text>
           </TouchableOpacity>
+
+          {/* Botón de Registro */}
+          <View style={styles.registerContainer}>
+            <Text style={styles.registerText}>¿No tienes cuenta?</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+              <Text style={styles.registerLink}>Regístrate</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
+      <Toast />
+    </>
   );
 };
 

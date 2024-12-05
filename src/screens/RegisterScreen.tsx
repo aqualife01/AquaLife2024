@@ -6,92 +6,189 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { globalStyles } from '../styles/globalStyles';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { db } from '../../firebaseConfig'; // Importa tu configuración de Firestore
+import { setDoc, doc } from 'firebase/firestore';
+import Toast from 'react-native-toast-message';
 
 const RegisterScreen = ({ navigation }: any) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [direccion, setDireccion] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
-    // Simulación de registro
-    alert('Registro exitoso');
-    navigation.navigate('Dashboard'); // Navega al Dashboard después del registro
+  // Manejar el Registro
+  const handleRegister = async () => {
+    if (!email || !password || !name || !telefono || !direccion) {
+      showToast('error', 'Por favor, completa todos los campos.');
+      return;
+    }
+
+    const auth = getAuth();
+    setLoading(true);
+
+    try {
+      // Registrar al usuario en Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Crear un documento en la colección "Clientes" usando el UID del usuario
+      await setDoc(doc(db, 'Clientes', user.uid), {
+        nombre: name,
+        telefono,
+        direccion,
+        email, // Guardar el email para facilidad de acceso
+      });
+
+      // Iniciar sesión automáticamente después del registro
+      await signInWithEmailAndPassword(auth, email, password);
+
+      // Mostrar mensaje de éxito
+      showToast('success', 'Registro exitoso. Iniciando sesión...');
+      
+      // Redirigir al Dashboard
+      setLoading(false);
+      navigation.replace('DashboardDrawer');
+    } catch (error: any) {
+      setLoading(false);
+
+      // Manejar errores específicos
+      if (typeof error === 'object' && error !== null && 'code' in error) {
+        switch (error.code) {
+          case 'auth/email-already-in-use':
+            showToast('error', 'El correo ya está registrado.');
+            break;
+          case 'auth/invalid-email':
+            showToast('error', 'El formato del correo no es válido.');
+            break;
+          case 'auth/weak-password':
+            showToast('error', 'La contraseña debe tener al menos 6 caracteres.');
+            break;
+          default:
+            showToast('error', 'Ha ocurrido un error. Inténtalo de nuevo.');
+        }
+      } else {
+        showToast('error', 'Ha ocurrido un error inesperado.');
+      }
+    }
+  };
+
+  // Mostrar Toast
+  const showToast = (type: 'success' | 'error', message: string) => {
+    Toast.show({
+      type,
+      text1: type === 'success' ? '¡Éxito!' : 'Error',
+      text2: message,
+      position: 'top',
+      visibilityTime: 3000,
+    });
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.outerContainer}>
-      <View style={styles.innerContainer}>
-        <Text style={[globalStyles.title, styles.titleText]}>
-          Crear una cuenta
-        </Text>
+    <>
+      <ScrollView contentContainerStyle={styles.outerContainer}>
+        <View style={styles.innerContainer}>
+          <Text style={[globalStyles.title, styles.titleText]}>
+            Crear una cuenta
+          </Text>
 
-        {/* Campo de Nombre */}
-        <TextInput
-          style={[globalStyles.input, styles.input]}
-          placeholder="Nombre completo"
-          placeholderTextColor="#888888"
-          value={name}
-          onChangeText={setName}
-        />
+          {/* Campo de Nombre */}
+          <TextInput
+            style={[globalStyles.input, styles.input]}
+            placeholder="Nombre completo"
+            placeholderTextColor="#888888"
+            value={name}
+            onChangeText={setName}
+          />
 
-        {/* Campo de Email */}
-        <TextInput
-          style={[globalStyles.input, styles.input]}
-          placeholder="Correo electrónico"
-          placeholderTextColor="#888888"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
+          {/* Campo de Teléfono */}
+          <TextInput
+            style={[globalStyles.input, styles.input]}
+            placeholder="Teléfono"
+            placeholderTextColor="#888888"
+            value={telefono}
+            onChangeText={setTelefono}
+            keyboardType="phone-pad"
+          />
 
-        {/* Campo de Contraseña */}
-        <TextInput
-          style={[globalStyles.input, styles.input]}
-          placeholder="Contraseña"
-          placeholderTextColor="#888888"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+          {/* Campo de Dirección */}
+          <TextInput
+            style={[globalStyles.input, styles.input]}
+            placeholder="Dirección"
+            placeholderTextColor="#888888"
+            value={direccion}
+            onChangeText={setDireccion}
+          />
 
-        {/* Botón de Registro */}
-        <TouchableOpacity
-          style={globalStyles.primaryButton}
-          onPress={handleRegister}
-        >
-          <Text style={globalStyles.primaryButtonText}>Registrarse</Text>
-        </TouchableOpacity>
+          {/* Campo de Email */}
+          <TextInput
+            style={[globalStyles.input, styles.input]}
+            placeholder="Correo electrónico"
+            placeholderTextColor="#888888"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+          />
 
-        {/* Enlace para iniciar sesión */}
-        <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>¿Ya tienes cuenta?</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.loginLink}>Inicia sesión</Text>
+          {/* Campo de Contraseña */}
+          <TextInput
+            style={[globalStyles.input, styles.input]}
+            placeholder="Contraseña"
+            placeholderTextColor="#888888"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+
+          {/* Mensaje de comprobando */}
+          {loading && <ActivityIndicator size="large" color="#00B5E2" />}
+
+          {/* Botón de Registro */}
+          <TouchableOpacity
+            style={globalStyles.primaryButton}
+            onPress={handleRegister}
+            disabled={loading}
+          >
+            <Text style={globalStyles.primaryButtonText}>Registrarse</Text>
           </TouchableOpacity>
+
+          {/* Enlace para iniciar sesión */}
+          <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>¿Ya tienes cuenta?</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <Text style={styles.loginLink}>Inicia sesión</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+      <Toast />
+    </>
   );
 };
 
+// Estilos del Componente
 const styles = StyleSheet.create({
   outerContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#F5F5F5', // Fondo más claro
+    backgroundColor: '#F5F5F5',
   },
   innerContainer: {
-    width: '90%', // Cuadro más pequeño con ancho dinámico
-    maxWidth: 400, // Máximo ancho para pantallas grandes
+    width: '90%',
+    maxWidth: 400,
     padding: 20,
-    backgroundColor: '#FFFFFF', // Fondo blanco
-    borderRadius: 10, // Bordes redondeados
-    elevation: 5, // Sombra para Android
-    shadowColor: '#000', // Sombra para iOS
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    elevation: 5,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 5,
@@ -109,7 +206,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 15,
     height: 50,
-    width: '100%', // Asegura que el input ocupe todo el ancho disponible
+    width: '100%',
   },
   loginContainer: {
     flexDirection: 'row',
