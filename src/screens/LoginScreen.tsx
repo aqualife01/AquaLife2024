@@ -11,10 +11,10 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { globalStyles } from '../styles/globalStyles';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import app from '../../firebaseConfig';
+import { db } from '../../firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 import Toast from 'react-native-toast-message';
 
-// Especifica el tipo de navegación para LoginScreen
 type LoginScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
   'Login'
@@ -34,18 +34,31 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       showToast('error', 'Por favor ingresa correo y contraseña.');
       return;
     }
-
-    const auth = getAuth(app);
+  
+    const auth = getAuth();
     setLoading(true);
-
+  
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      setLoading(false);
-      showToast('success', 'Inicio de sesión exitoso. Accediendo...');
-      navigation.navigate('DashboardDrawer');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+  
+      // Obtener el tipo de usuario desde Firestore
+      const userDoc = await getDoc(doc(db, 'Clientes', user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const userType = userData?.tipo;
+  
+        setLoading(false);
+        showToast('success', 'Inicio de sesión exitoso. Accediendo...');
+  
+        // Redirigir según el tipo de usuario
+        navigation.navigate('DashboardDrawer', { userType });
+      } else {
+        setLoading(false);
+        showToast('error', 'No se pudo obtener la información del usuario.');
+      }
     } catch (error: any) {
       setLoading(false);
-
       // Manejo de errores con mensajes específicos
       switch (error.code) {
         case 'auth/user-not-found':
@@ -67,6 +80,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       }
     }
   };
+  
 
   const showToast = (type: 'success' | 'error', message: string) => {
     Toast.show({
@@ -90,7 +104,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       text2: message,
       position: 'top',
       visibilityTime: 4000,
-      onPress: actionCallback, // Llama a la acción si el usuario toca el mensaje
+      onPress: actionCallback,
       props: { actionText },
     });
   };

@@ -1,20 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ImageBackground,
   Image,
   StyleSheet,
+  ScrollView,
 } from 'react-native';
 import { globalStyles } from '../styles/globalStyles';
 
 const HomeScreen = ({ navigation }: any) => {
+  const [hoveredBox, setHoveredBox] = useState<string | null>(null);
+
   return (
     <ImageBackground
       source={require('../assets/background.png')} // Imagen de fondo
-      style={[globalStyles.container, styles.backgroundImage]} // Mezcla estilos globales y específicos
+      style={styles.backgroundImage}
     >
       {/* Barra superior */}
       <View style={styles.topBar}>
@@ -22,128 +24,187 @@ const HomeScreen = ({ navigation }: any) => {
           source={require('../assets/logo.png')} // Logo
           style={styles.logo}
         />
-        <View style={styles.navMenu}>
-          <Text style={styles.navItem}>About</Text>
-          <Text style={styles.navItem}>How it works?</Text>
-          <Text style={styles.navItem}>Contact Us</Text>
-        </View>
+        <Text style={styles.companyName}>AquaLife</Text>
       </View>
 
       {/* Contenido principal */}
-      <View style={styles.contentContainer}>
-        <Text style={styles.titleText}>We are Creative Agency.</Text>
-        <Text style={styles.subTitleText}>
-          Providing pure water solutions for your family and business.
-        </Text>
-
-        {/* Cuadro de búsqueda */}
-        <View style={styles.searchBox}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search something here..."
-            placeholderTextColor="#888888"
-          />
+      <ScrollView contentContainerStyle={styles.contentContainer}>
+        <View style={styles.sectionContainer}>
+          <Text style={styles.titleText}>Bienvenidos a AquaLife</Text>
+          <Text style={styles.subTitleText}>
+            Proporcionando soluciones de agua pura para tu familia y negocio.
+          </Text>
         </View>
 
-        {/* Botones */}
-        <View style={styles.buttonContainer}>
+        <View style={styles.missionVisionContainer}>
           <TouchableOpacity
-            style={globalStyles.primaryButton}
-            onPress={() => navigation.navigate('Login')}
+            style={[
+              styles.missionVisionBox,
+              hoveredBox === 'mission' && styles.hoveredBox,
+            ]}
+            activeOpacity={0.8}
+            onPress={() => {}}
+            onPressIn={() => setHoveredBox('mission')}
+            onPressOut={() => setHoveredBox(null)}
           >
-            <Text style={globalStyles.primaryButtonText}>Sign In</Text>
+            <Text style={styles.boxTitle}>Nuestra Misión</Text>
+            <Text style={styles.boxText}>
+              Ofrecer soluciones de agua de alta calidad que enriquezcan vidas y
+              apoyen a las comunidades.
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[globalStyles.primaryButton, styles.secondaryButton]}
-            onPress={() => navigation.navigate('Register')}
+            style={[
+              styles.missionVisionBox,
+              hoveredBox === 'vision' && styles.hoveredBox,
+            ]}
+            activeOpacity={0.8}
+            onPress={() => {}}
+            onPressIn={() => setHoveredBox('vision')}
+            onPressOut={() => setHoveredBox(null)}
           >
-            <Text style={styles.secondaryButtonText}>Sign Up</Text>
+            <Text style={styles.boxTitle}>Nuestra Visión</Text>
+            <Text style={styles.boxText}>
+              Ser el proveedor líder de soluciones sostenibles de agua a nivel
+              mundial.
+            </Text>
           </TouchableOpacity>
         </View>
-      </View>
+
+        <View style={styles.callToActionContainer}>
+          <Text style={styles.callToActionText}>¡Únete a AquaLife Hoy!</Text>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={globalStyles.primaryButton}
+              onPress={() => navigation.navigate('Login')}
+            >
+              <Text style={globalStyles.primaryButtonText}>Iniciar Sesión</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[globalStyles.primaryButton, styles.secondaryButton]}
+              onPress={() => navigation.navigate('Register')}
+            >
+              <Text style={styles.secondaryButtonText}>Registrarse</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.locationContainer}>
+          <Text style={styles.boxTitle}>¿Dónde encontrarnos?</Text>
+          <Text style={styles.boxText}>
+            Calle Mama Tere, CC Esquina de Tipuro, Nivel PB Local 1, Sector
+            Tipuro, Maturín, Monagas, Venezuela.
+          </Text>
+        </View>
+      </ScrollView>
     </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  // Imagen de fondo ajustada a la pantalla
   backgroundImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  // Barra superior
   topBar: {
     width: '100%',
     height: 80,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginTop: 10,
+    paddingTop: 20,
   },
   logo: {
     width: 50,
     height: 50,
     resizeMode: 'contain',
   },
-  navMenu: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '60%',
-  },
-  navItem: {
+  companyName: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
-    marginHorizontal: 5,
+    fontSize: 24,
+    fontWeight: 'bold',
   },
-  // Contenido principal
   contentContainer: {
-    flex: 1,
+    padding: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
+  },
+  sectionContainer: {
+    marginBottom: 30,
+    alignItems: 'center',
   },
   titleText: {
-    fontSize: 28,
+    fontSize: 32,
     color: '#FFFFFF',
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 10,
   },
   subTitleText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#CCCCCC',
     textAlign: 'center',
     marginBottom: 20,
-    paddingHorizontal: 20,
   },
-  // Cuadro de búsqueda
-  searchBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 30,
-    width: '90%',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginBottom: 20,
+  missionVisionContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+  },
+  missionVisionBox: {
+    width: '45%',
+    padding: 15,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
     elevation: 5,
   },
-  searchInput: {
-    fontSize: 16,
-    color: '#333333',
+  hoveredBox: {
+    backgroundColor: '#e0f7fa',
   },
-  // Botones
+  boxTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+    color: '#0D9488',
+  },
+  boxText: {
+    fontSize: 14,
+    color: '#555555',
+    textAlign: 'center',
+  },
+  locationContainer: {
+    width: '100%',
+    padding: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+    marginTop: 30,
+  },
+  callToActionContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  callToActionText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 20,
+  },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '90%',
-    marginTop: 20,
   },
   secondaryButton: {
     backgroundColor: '#FFFFFF',
