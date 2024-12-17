@@ -158,11 +158,11 @@ const styles = StyleSheet.create({
     padding: 15,
     backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: 10,
+    elevation: 5, // Sustituto de sombras en Android
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
-    elevation: 5,
   },
   hoveredBox: {
     backgroundColor: '#e0f7fa',
@@ -184,11 +184,11 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: 10,
+    elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
-    elevation: 5,
     marginTop: 30,
   },
   callToActionContainer: {

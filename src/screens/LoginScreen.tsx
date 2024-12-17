@@ -14,11 +14,9 @@ import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { db } from '../../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import Toast from 'react-native-toast-message';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
-type LoginScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  'Login'
->;
+type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
 interface Props {
   navigation: LoginScreenNavigationProp;
@@ -39,35 +37,48 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setLoading(true);
   
     try {
+      // Autenticar al usuario usando Firebase Authentication
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
   
-      // Obtener el tipo de usuario desde Firestore
-      const userDoc = await getDoc(doc(db, 'Clientes', user.uid));
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const userType = userData?.tipo;
+      // Buscar el usuario en 'Clientes' por email
+      let userData;
+      let userType;
+      const clientesQuery = query(collection(db, 'Clientes'), where('email', '==', email));
+      const clientesSnapshot = await getDocs(clientesQuery);
   
-        setLoading(false);
-        showToast('success', 'Inicio de sesión exitoso. Accediendo...');
-  
-        // Redirigir según el tipo de usuario
-        navigation.navigate('DashboardDrawer', { userType });
+      if (!clientesSnapshot.empty) {
+        userData = clientesSnapshot.docs[0].data();
+        userType = userData?.tipo; // Tipo de usuario de 'Clientes'
       } else {
-        setLoading(false);
-        showToast('error', 'No se pudo obtener la información del usuario.');
+        // Si no existe en 'Clientes', buscar en 'usuarios'
+        const usuariosQuery = query(collection(db, 'usuarios'), where('email', '==', email));
+        const usuariosSnapshot = await getDocs(usuariosQuery);
+  
+        if (!usuariosSnapshot.empty) {
+          userData = usuariosSnapshot.docs[0].data();
+          userType = userData?.tipo; // Tipo de usuario de 'usuarios'
+        } else {
+          throw new Error('No se pudo encontrar la información del usuario.');
+        }
       }
+  
+      setLoading(false);
+      showToast('success', 'Inicio de sesión exitoso. Accediendo...');
+  
+      if (userType === 'cliente' || userType === 'admin') {
+        navigation.navigate('MainDrawer', { userType });
+      } else {
+        throw new Error('Tipo de usuario desconocido.');
+      }
+      
     } catch (error: any) {
       setLoading(false);
-      // Manejo de errores con mensajes específicos
+      console.error(error.message);
+  
       switch (error.code) {
         case 'auth/user-not-found':
-          showToastWithAction(
-            'error',
-            'El correo no está registrado.',
-            '¿Registrarse?',
-            () => navigation.navigate('Register')
-          );
+          showToast('error', 'El correo no está registrado.');
           break;
         case 'auth/wrong-password':
           showToast('error', 'Correo o contraseña incorrectos.');
@@ -76,10 +87,11 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           showToast('error', 'El formato del correo no es válido.');
           break;
         default:
-          showToast('error', 'Ha ocurrido un error. Inténtalo de nuevo.');
+          showToast('error', error.message || 'Ha ocurrido un error.');
       }
     }
   };
+  
   
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -113,11 +125,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     <>
       <View style={[globalStyles.container, styles.outerContainer]}>
         <View style={styles.innerContainer}>
-          <Text style={[globalStyles.title, styles.titleText]}>
-            Iniciar Sesión
-          </Text>
-
-          {/* Campo de Email */}
+          <Text style={[globalStyles.title, styles.titleText]}>Iniciar Sesión</Text>
           <TextInput
             style={[globalStyles.input, styles.input]}
             placeholder="Email"
@@ -127,8 +135,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             autoCapitalize="none"
             keyboardType="email-address"
           />
-
-          {/* Campo de Contraseña */}
           <TextInput
             style={[globalStyles.input, styles.input]}
             placeholder="Contraseña"
@@ -137,20 +143,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             onChangeText={setPassword}
             secureTextEntry
           />
-
-          {/* Mensaje de comprobando */}
           {loading && <ActivityIndicator size="large" color="#00B5E2" />}
-
-          {/* Botón de Ingresar */}
-          <TouchableOpacity
-            style={globalStyles.primaryButton}
-            onPress={handleLogin}
-            disabled={loading}
-          >
+          <TouchableOpacity style={globalStyles.primaryButton} onPress={handleLogin} disabled={loading}>
             <Text style={globalStyles.primaryButtonText}>Ingresar</Text>
           </TouchableOpacity>
-
-          {/* Botón de Registro */}
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>¿No tienes cuenta?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
