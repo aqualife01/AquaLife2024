@@ -72,7 +72,7 @@ const DashboardScreen = () => {
         </View>
         <View style={styles.card}>
           <FontAwesome5 name="box" size={24} color="#FF9800" />
-          <Text style={styles.cardTitle}>Productos</Text>
+          <Text style={styles.cardTitle}>Pedidos</Text>
           <Text style={styles.cardValue}>20</Text>
         </View>
         <View style={styles.card}>

@@ -14,5 +14,7 @@ export type RootStackParamList = {
   Providers: undefined;
   Orders: undefined;
   User: undefined;
+  OrdersAdminScreen: undefined;
+
   HeaderComponent:  { userType: 'admin' | 'cliente' };
 };
