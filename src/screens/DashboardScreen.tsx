@@ -1,8 +1,61 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { db, auth } from '../../firebaseConfig'; // Asegúrate de que la ruta sea correcta
+import { collection, onSnapshot, query, where, getDocs, DocumentData } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const DashboardScreen = () => {
+  const [userCount, setUserCount] = useState(0);
+  const [clientCount, setClientCount] = useState(0);
+  const [userData, setUserData] = useState({
+    nombre: '',
+    correo: '',
+    rol: '',
+  });
+
+  // Listener en tiempo real para usuarios y clientes
+  useEffect(() => {
+    const unsubscribeUsers = onSnapshot(collection(db, 'usuarios'), (snapshot) => {
+      setUserCount(snapshot.size);
+    });
+
+    const unsubscribeClients = onSnapshot(collection(db, 'Clientes'), (snapshot) => {
+      setClientCount(snapshot.size);
+    });
+
+    return () => {
+      unsubscribeUsers();
+      unsubscribeClients();
+    };
+  }, []);
+
+  // Cargar información personal del usuario autenticado
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userQuery = query(collection(db, 'usuarios'), where('email', '==', user.email));
+        const querySnapshot = await getDocs(userQuery);
+
+        querySnapshot.forEach((doc: DocumentData) => {
+          setUserData({
+            nombre: doc.data().nombre || 'Sin nombre',
+            correo: doc.data().email || 'Sin correo',
+            rol: doc.data().tipo || 'Usuario',
+          });
+        });
+      } else {
+        setUserData({
+          nombre: '',
+          correo: '',
+          rol: '',
+        });
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* Tarjetas Principales */}
@@ -10,12 +63,12 @@ const DashboardScreen = () => {
         <View style={styles.card}>
           <FontAwesome5 name="user-friends" size={24} color="#4CAF50" />
           <Text style={styles.cardTitle}>Clientes</Text>
-          <Text style={styles.cardValue}>10</Text>
+          <Text style={styles.cardValue}>{clientCount}</Text>
         </View>
         <View style={styles.card}>
           <FontAwesome5 name="users" size={24} color="#2196F3" />
           <Text style={styles.cardTitle}>Usuarios</Text>
-          <Text style={styles.cardValue}>5</Text>
+          <Text style={styles.cardValue}>{userCount}</Text>
         </View>
         <View style={styles.card}>
           <FontAwesome5 name="box" size={24} color="#FF9800" />
@@ -35,20 +88,32 @@ const DashboardScreen = () => {
         {/* Información Personal */}
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>Información Personal</Text>
-          <Text style={styles.infoText}>Nombre: <Text style={styles.boldText}>Vida Informático</Text></Text>
-          <Text style={styles.infoText}>Correo: <Text style={styles.boldText}>vida@gmail.com</Text></Text>
-          <Text style={styles.infoText}>Rol: <Text style={styles.boldText}>Administrador</Text></Text>
-          <Text style={styles.infoText}>Usuario: <Text style={styles.boldText}>admin</Text></Text>
+          <Text style={styles.infoText}>
+            Nombre: <Text style={styles.boldText}>{userData.nombre || 'N/A'}</Text>
+          </Text>
+          <Text style={styles.infoText}>
+            Correo: <Text style={styles.boldText}>{userData.correo || 'N/A'}</Text>
+          </Text>
+          <Text style={styles.infoText}>
+            Rol: <Text style={styles.boldText}>{userData.rol || 'N/A'}</Text>
+          </Text>
         </View>
 
         {/* Datos de la Empresa */}
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>Datos de la Empresa</Text>
-          <Text style={styles.infoText}>RUC: <Text style={styles.boldText}>71347267</Text></Text>
-          <Text style={styles.infoText}>Nombre: <Text style={styles.boldText}>Vida Informático</Text></Text>
-          <Text style={styles.infoText}>Razón Social: <Text style={styles.boldText}>Vida Informático</Text></Text>
-          <Text style={styles.infoText}>Teléfono: <Text style={styles.boldText}>925491523</Text></Text>
-          <Text style={styles.infoText}>Correo: <Text style={styles.boldText}>naju@vidainformatico.com</Text></Text>
+          <Text style={styles.infoText}>
+            RIF: <Text style={styles.boldText}>71347267</Text>
+          </Text>
+          <Text style={styles.infoText}>
+            Nombre: <Text style={styles.boldText}>AQUALIFE</Text>
+          </Text>
+          <Text style={styles.infoText}>
+            Teléfono: <Text style={styles.boldText}>04145491523</Text>
+          </Text>
+          <Text style={styles.infoText}>
+            Correo: <Text style={styles.boldText}>AquaLife2024@gmail.com</Text>
+          </Text>
         </View>
       </View>
 
