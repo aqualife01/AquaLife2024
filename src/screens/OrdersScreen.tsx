@@ -15,9 +15,12 @@ import { globalStyles, colors } from "../styles/globalStyles";
 import { db, auth } from "../../firebaseConfig"; // Ajusta la ruta según tu proyecto
 import { collection, addDoc } from "firebase/firestore";
 
+// Importa tu función para obtener número correlativo
+import { getNextOrderNumber } from "../components/getNextOrderNumber"; // Ajusta la ruta
+
 interface Order {
-  withHandle: number;      // Botellones con asa
-  withoutHandle: number;   // Botellones sin asa
+  withHandle: number;     // Botellones con asa
+  withoutHandle: number;  // Botellones sin asa
   type: "intercambio" | "llenado";
   comments: string;
   priority: "alta" | "media" | "baja";
@@ -73,7 +76,7 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       : "Sus botellones serán tratados, desinfectados y estarán óptimos para su entrega.";
   };
 
-  // Crea el pedido en la colección "Pedidos" de Firestore
+  // Crea el pedido en la colección "Pedidos" de Firestore, asignando numeroPedido
   const handleCreateOrderInFirestore = async () => {
     try {
       // Verifica si hay un usuario logueado
@@ -86,14 +89,17 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         return;
       }
 
-      // Prepara los datos para la colección
-      // (puedes ajustar formato de fecha/hora)
+      // Prepara fecha y hora
       const now = new Date();
       const fecha = now.toISOString().split("T")[0]; // yyyy-mm-dd
       const hora = now.toTimeString().split(" ")[0]; // HH:MM:SS
 
+      // Primero obtenemos el número correlativo
+      const numeroPedido = await getNextOrderNumber(db);
+
+      // Construimos el objeto del pedido
       const nuevoPedido = {
-        clienteId: user.uid,               // UID del usuario autenticado
+        clienteId: user.uid,       // UID del usuario autenticado
         fecha,
         hora,
         cantidadConAsa: order.withHandle,
@@ -101,16 +107,16 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         costoUnitario: COST_PER_BOTTLE,
         total: totalPrice,
         estado: "pendiente",
-        empleadoAsignadoId: "abc123",      // Ejemplo; ajústalo según tu flujo
-        observaciones: order.comments,     // Comentarios que ingresó el cliente
+        empleadoAsignadoId: "abc123",  // Ejemplo
+        observaciones: order.comments,
+        numeroPedido: numeroPedido    // El nuevo correlativo
       };
 
-      // Inserta en la colección "Pedidos"
+      // Guardar en la colección "Pedidos"
       await addDoc(collection(db, "Pedidos"), nuevoPedido);
 
       Alert.alert("Éxito", "Tu pedido ha sido generado correctamente.");
-      // Después de crear el documento, puedes navegar a donde necesites
-      navigation.goBack(); // o navigation.navigate("Home") según tu flujo
+      navigation.goBack(); 
     } catch (error) {
       console.error("Error al crear pedido:", error);
       Alert.alert("Error", "No se pudo crear el pedido. Intenta de nuevo.");
@@ -187,8 +193,8 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
           {/* COSTO TOTAL */}
           <Text style={globalStyles.title}>
-            Costo Total:{" "}
-            <Text style={{ fontWeight: "bold", color: colors.primary }}>
+            Costo Total:{' '}
+            <Text style={{ fontWeight: 'bold', color: colors.primary }}>
               ${totalPrice.toFixed(2)}
             </Text>
           </Text>
@@ -210,7 +216,8 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <Text>Comentarios: {order.comments}</Text>
             <Text>Prioridad: {order.priority}</Text>
             <Text>
-              Total: <Text style={{ fontWeight: "bold" }}>${totalPrice.toFixed(2)}</Text>
+              Total:{' '}
+              <Text style={{ fontWeight: 'bold' }}>${totalPrice.toFixed(2)}</Text>
             </Text>
 
             {/* BOTÓN DE FACTURACIÓN (crea el pedido en Firestore) */}
@@ -227,23 +234,24 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   );
 };
 
+// Estilos
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
     backgroundColor: colors.background,
   },
   card: {
-    width: "90%",
+    width: '90%',
     maxWidth: 400,
     backgroundColor: colors.primaryShades[50],
     borderRadius: 10,
     padding: 20,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 5,
-    alignSelf: "center",
+    alignSelf: 'center',
     marginBottom: 20,
   },
   scrollContainer: {
@@ -256,18 +264,18 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderRadius: 8,
     backgroundColor: colors.primaryShades[50],
-    width: "100%",
+    width: '100%',
   },
   summaryContainer: {
     marginTop: 20,
     padding: 15,
-    backgroundColor: colors.primaryShades[200], // Fondo gris tenue
+    backgroundColor: colors.primaryShades[200],
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.primary,
-    width: "90%",
-    alignSelf: "center",
-    alignItems: "center",
+    width: '90%',
+    alignSelf: 'center',
+    alignItems: 'center',
   },
 });
 

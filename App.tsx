@@ -18,6 +18,7 @@ import MaintenanceScreen from './src/screens/MaintenanceScreen';
 import InvoicesScreen from './src/screens/InvoicesScreen';
 import ProvidersScreen from './src/screens/ProvidersScreen';
 import OrdersAdminScreen from './src/screens/OrdersAdminScreen';
+import CreateScreenUser from './src/screens/CreateScreenUser';
 
 
 // Drawer personalizado
@@ -45,6 +46,8 @@ const MainDrawerNavigator = ({ route }: { route: any }) => {
           <Drawer.Screen name="Invoices" component={InvoicesScreen} />
           <Drawer.Screen name="Providers" component={ProvidersScreen} />
           <Drawer.Screen name="OrdersA" component={OrdersAdminScreen} />
+          <Drawer.Screen name="Create" component={CreateScreenUser} />
+          
         </>
       ) : (
         <Drawer.Screen name="UserDashboard" component={UserDashboardScreen} />
@@ -53,7 +56,10 @@ const MainDrawerNavigator = ({ route }: { route: any }) => {
 
       {/* Opciones comunes */}
       <Drawer.Screen name="User" component={UserScreen} />
+      {userType !== 'admin' && <Drawer.Screen name="dashboard" component={ UserDashboardScreen} />}
+     
       {userType !== 'admin' && <Drawer.Screen name="Orders" component={OrdersScreen} />}
+
     </Drawer.Navigator>
   );
 };

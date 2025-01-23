@@ -15,6 +15,7 @@ export type RootStackParamList = {
   Orders: undefined;
   User: undefined;
   OrdersAdminScreen: undefined;
+  CreateScreenUser: { userType: 'admin' }; // Admin Dashboard
 
   HeaderComponent:  { userType: 'admin' | 'cliente' };
 };

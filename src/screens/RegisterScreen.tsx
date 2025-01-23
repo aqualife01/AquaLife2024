@@ -8,11 +8,41 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { globalStyles } from '../styles/globalStyles';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { db } from '../../firebaseConfig'; // Importa tu configuración de Firestore
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { db } from '../../firebaseConfig'; // Tu configuración de Firestore
 import { setDoc, doc } from 'firebase/firestore';
 import Toast from 'react-native-toast-message';
+
+// EJEMPLO LOCAL de 'colors'. Si tienes un archivo de tema, impórtalo desde allí.
+const colors = {
+  primary: '#00B5E2',
+  // Puedes añadir más colores según tu paleta.
+};
+
+// EJEMPLO LOCAL de 'globalStyles'. Si ya tienes uno, impórtalo en vez de definirlo aquí.
+const globalStyles = StyleSheet.create({
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  input: {
+    // Defínelo según tus necesidades
+    fontSize: 16,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  primaryButton: {
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+});
 
 const RegisterScreen = ({ navigation }: any) => {
   const [name, setName] = useState('');
@@ -42,22 +72,19 @@ const RegisterScreen = ({ navigation }: any) => {
         nombre: name,
         telefono,
         direccion,
-        email, // Guardar el email para facilidad de acceso
+        email,
+        tipo: "cliente", // <-- Campo agregado automáticamente
       });
 
-      // Iniciar sesión automáticamente después del registro
-      await signInWithEmailAndPassword(auth, email, password);
-
       // Mostrar mensaje de éxito
-      showToast('success', 'Registro exitoso. Iniciando sesión...');
-      
-      // Redirigir al Dashboard
+      showToast('success', 'Registro exitoso.');
+
+      // Ir a la pantalla de inicio de sesión
       setLoading(false);
-      navigation.replace('DashboardDrawer');
+      navigation.replace('Login'); // O navigation.navigate('Login')
     } catch (error: any) {
       setLoading(false);
 
-      // Manejar errores específicos
       if (typeof error === 'object' && error !== null && 'code' in error) {
         switch (error.code) {
           case 'auth/email-already-in-use':
@@ -146,8 +173,8 @@ const RegisterScreen = ({ navigation }: any) => {
             onChangeText={setPassword}
           />
 
-          {/* Mensaje de comprobando */}
-          {loading && <ActivityIndicator size="large" color="#00B5E2" />}
+          {/* Indicador de carga */}
+          {loading && <ActivityIndicator size="large" color={colors.primary} />}
 
           {/* Botón de Registro */}
           <TouchableOpacity
@@ -172,7 +199,6 @@ const RegisterScreen = ({ navigation }: any) => {
   );
 };
 
-// Estilos del Componente
 const styles = StyleSheet.create({
   outerContainer: {
     flexGrow: 1,
@@ -220,7 +246,7 @@ const styles = StyleSheet.create({
   },
   loginLink: {
     fontSize: 16,
-    color: '#00B5E2',
+    color: colors.primary, // Usamos el 'colors' definido localmente
     marginLeft: 5,
     fontWeight: 'bold',
   },

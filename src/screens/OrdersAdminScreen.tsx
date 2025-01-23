@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import {
   collection,
@@ -15,62 +16,106 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore';
-import { db } from '../../firebaseConfig'; // Ajusta la ruta si corresponde
+import { db } from '../../firebaseConfig'; // Ajusta la ruta
 import { globalStyles, colors } from '../styles/globalStyles';
 
-// Definimos la interfaz de un Pedido
 interface Pedido {
   id: string;
+  numeroPedido?: number;  
   clienteId: string;
-  fecha: string;           // Asumimos formato "2025-01-15", etc.
+  fecha: string;          // "2025-01-15"
   hora: string;
   cantidadConAsa: number;
   cantidadSinAsa: number;
   costoUnitario: number;
   total: number;
-  estado: string;          // "pendiente", "listo", "entregado"
+  estado: string;         // "pendiente", "listo", "entregado"
   empleadoAsignadoId: string;
   observaciones: string;
 }
 
-// Definimos la interfaz de un Cliente
 interface Cliente {
   nombre: string;
   direccion?: string;
   email?: string;
   telefono?: string;
-  // ... cualquier campo adicional que tengas en tu colección Clientes
 }
+
+// Formatea Nº de pedido (ej. 7 → "0007")
+function formatOrderNumber(num: number): string {
+  return num.toString().padStart(4, '0');
+}
+
+// Formatea fecha "AAAA-MM-DD" → "DD/MM/AAAA"
+function formatFecha(fechaISO: string): string {
+  const [year, month, day] = fechaISO.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+// Asigna prioridad a cada estado
+function getEstadoPriority(estado: string): number {
+  switch (estado) {
+    case 'pendiente':
+      return 1;
+    case 'listo':
+      return 2;
+    case 'entregado':
+      return 3;
+    default:
+      return 99;
+  }
+}
+
+// Para agrupar por fecha, tenemos dos tipos de items en la lista
+type ListItem =
+  | { type: 'header'; fecha: string }
+  | { type: 'pedido'; data: Pedido };
 
 const OrdersAdminScreen = () => {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [clientesMap, setClientesMap] = useState<Record<string, Cliente>>({});
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Suscripción a PEDIDOS
+  const [searchText, setSearchText] = useState<string>('');
+
   useEffect(() => {
-    // Aquí ordenamos por 'fecha' desc según Firestore,
-    // pero luego haremos un sort manual para poner "pendiente" primero.
+    // Query a "Pedidos" ordenados por fecha desc (nivel Firestore),
+    // pero refinamos la ordenación manualmente con prioridad + numeroPedido.
     const q = query(collection(db, 'Pedidos'), orderBy('fecha', 'desc'));
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        let pedidosData: Pedido[] = snapshot.docs.map((doc) => ({
+        const pedidosData: Pedido[] = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...(doc.data() as Omit<Pedido, 'id'>),
         }));
 
-        // 1. Primero filtramos los "pendientes" para llevarlos arriba.
-        // 2. Mantenemos un orden por fecha (por ejemplo, más reciente arriba).
+        // Ordenar:
+        // 1) prioridad por estado (pendiente→1, listo→2, entregado→3)
+        // 2) si ambos son 'entregado', ordenar por numeroPedido desc
+        // 3) si mismo estado, se ordena por fecha desc
         pedidosData.sort((a, b) => {
-          // Primero comparamos estado
-          if (a.estado === 'pendiente' && b.estado !== 'pendiente') return -1;
-          if (a.estado !== 'pendiente' && b.estado === 'pendiente') return 1;
+          const priorityA = getEstadoPriority(a.estado);
+          const priorityB = getEstadoPriority(b.estado);
 
-          // Si ambos son pendientes o ninguno es pendiente, ordenamos por fecha desc
-          const dateA = new Date(a.fecha).getTime();
-          const dateB = new Date(b.fecha).getTime();
-          return dateB - dateA; // desc
+          if (priorityA !== priorityB) {
+            // Diferente estado => orden por prioridad
+            return priorityA - priorityB;
+          }
+
+          // Mismo estado
+          if (priorityA === 3) {
+            // Si ambos están en "entregado", ordenamos por numeroPedido desc
+            const numA = a.numeroPedido || 0;
+            const numB = b.numeroPedido || 0;
+            return numB - numA; // desc
+          } else {
+            // Si mismo estado pero no es 'entregado' (pendiente o listo),
+            // ordenamos por fecha desc
+            const dateA = new Date(a.fecha).getTime();
+            const dateB = new Date(b.fecha).getTime();
+            return dateB - dateA;
+          }
         });
 
         setPedidos(pedidosData);
@@ -85,8 +130,8 @@ const OrdersAdminScreen = () => {
     return () => unsubscribe();
   }, []);
 
-  // Suscripción a CLIENTES (guardamos en un diccionario/objeto { clienteId -> Cliente })
   useEffect(() => {
+    // Suscripción a "Clientes" para luego mapear clienteId
     const unsubscribe = onSnapshot(collection(db, 'Clientes'), (snapshot) => {
       const map: Record<string, Cliente> = {};
       snapshot.forEach((doc) => {
@@ -94,106 +139,158 @@ const OrdersAdminScreen = () => {
       });
       setClientesMap(map);
     });
-
     return () => unsubscribe();
   }, []);
 
-  // Función para cambiar el estado de un pedido
+  // Actualizar estado del pedido
   const handleChangeEstado = async (pedidoId: string, nuevoEstado: string) => {
     try {
       const pedidoRef = doc(db, 'Pedidos', pedidoId);
       await updateDoc(pedidoRef, { estado: nuevoEstado });
-      console.log(`Estado del pedido ${pedidoId} actualizado a: ${nuevoEstado}`);
+      console.log(`Estado del pedido ${pedidoId} → ${nuevoEstado}`);
     } catch (error) {
       console.error('Error actualizando estado:', error);
     }
   };
 
-  // Renderiza cada pedido
-  const renderItem = ({ item }: { item: Pedido }) => {
-    // Tomamos la info del cliente desde clientesMap
+  // Filtrado local (por número de pedido o nombre de cliente)
+  const filteredPedidos = pedidos.filter((item) => {
     const clienteInfo = clientesMap[item.clienteId];
-    const clienteNombre = clienteInfo?.nombre || 'Cliente sin nombre';
-    const clienteDireccion = clienteInfo?.direccion || 'Sin dirección';
-
-    const esEntregado = item.estado === 'entregado';
-
+    const nombreCliente = clienteInfo?.nombre?.toLowerCase() || '';
+    const numeroString = item.numeroPedido
+      ? formatOrderNumber(item.numeroPedido)
+      : item.id; // fallback al doc.id
+    const texto = searchText.toLowerCase();
     return (
-      <View style={styles.card}>
-        <Text style={styles.headerText}>Pedido ID: {item.id}</Text>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Cliente:</Text>
-          <Text style={styles.value}>{clienteNombre}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Dirección:</Text>
-          <Text style={styles.value}>{clienteDireccion}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Fecha:</Text>
-          <Text style={styles.value}>{item.fecha}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Hora:</Text>
-          <Text style={styles.value}>{item.hora}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Con Asa:</Text>
-          <Text style={styles.value}>{item.cantidadConAsa}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Sin Asa:</Text>
-          <Text style={styles.value}>{item.cantidadSinAsa}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Estado:</Text>
-          <Text style={[styles.value, styles.estado]}>
-            {item.estado.toUpperCase()}
-          </Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Total:</Text>
-          <Text style={styles.value}>${item.total.toFixed(2)}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>Observaciones:</Text>
-          <Text style={styles.value}>{item.observaciones || '—'}</Text>
-        </View>
-
-        {/* Botones para cambiar estado */}
-        <View style={styles.buttonsContainer}>
-          {/* Si el pedido ya está ENTREGADO, no mostramos el botón "Listo" */}
-          {!esEntregado && (
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: colors.primaryShades[200] }]}
-              onPress={() => handleChangeEstado(item.id, 'listo')}
-            >
-              <Text style={styles.buttonText}>Listo</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Botón ENTREGADO */}
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: colors.secondary }]}
-            onPress={() => handleChangeEstado(item.id, 'entregado')}
-          >
-            <Text style={styles.buttonText}>Entregado</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      numeroString.toLowerCase().includes(texto) ||
+      nombreCliente.includes(texto)
     );
+  });
+
+  // Convertimos a estructura con "header" cada vez que cambia la fecha
+  const listData: ListItem[] = [];
+  let currentFecha = '';
+  for (let i = 0; i < filteredPedidos.length; i++) {
+    const ped = filteredPedidos[i];
+    // Si la fecha cambió, insertamos un header
+    if (ped.fecha !== currentFecha) {
+      currentFecha = ped.fecha;
+      listData.push({ type: 'header', fecha: currentFecha });
+    }
+    listData.push({ type: 'pedido', data: ped });
+  }
+
+  // Render de cada item
+  const renderItem = ({ item }: { item: ListItem }) => {
+    if (item.type === 'header') {
+      // Encabezado por fecha
+      const fechaStr = formatFecha(item.fecha);
+      return (
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerTextFecha}>Pedidos del {fechaStr}</Text>
+        </View>
+      );
+    } else {
+      // Pedido real
+      const pedido = item.data;
+      const clienteInfo = clientesMap[pedido.clienteId];
+
+      // Convertimos a mayúsculas
+      const clienteNombre = (clienteInfo?.nombre || 'Cliente sin nombre').toUpperCase();
+      const clienteDireccion = (clienteInfo?.direccion || 'Sin dirección').toUpperCase();
+
+      // Estado → mostramos botones
+      const mostrarBotonListo = pedido.estado === 'pendiente';
+      const mostrarBotonEntregado =
+        pedido.estado === 'pendiente' || pedido.estado === 'listo';
+
+      // Ej: "Pedido Nº: 0007"
+      const tituloPedido = pedido.numeroPedido
+        ? `Pedido Nº: ${formatOrderNumber(pedido.numeroPedido)}`
+        : `Pedido ID: ${pedido.id}`;
+
+      const totalBotellones = pedido.cantidadConAsa + pedido.cantidadSinAsa;
+
+      return (
+        <View style={styles.card}>
+          <Text style={styles.headerText}>{tituloPedido}</Text>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Cliente:</Text>
+            <Text style={styles.value}>{clienteNombre}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Dirección:</Text>
+            <Text style={styles.value}>{clienteDireccion}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Fecha:</Text>
+            <Text style={styles.value}>{pedido.fecha}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Hora:</Text>
+            <Text style={styles.value}>{pedido.hora}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Con Asa:</Text>
+            <Text style={styles.value}>{pedido.cantidadConAsa}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Sin Asa:</Text>
+            <Text style={styles.value}>{pedido.cantidadSinAsa}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Total Botellones:</Text>
+            <Text style={styles.value}>{totalBotellones}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Estado:</Text>
+            <Text style={[styles.value, styles.estado]}>
+              {pedido.estado.toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Total:</Text>
+            <Text style={styles.value}>${pedido.total.toFixed(2)}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.label}>Observaciones:</Text>
+            <Text style={styles.value}>{pedido.observaciones || '—'}</Text>
+          </View>
+
+          <View style={styles.buttonsContainer}>
+            {mostrarBotonListo && (
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: colors.primaryShades[200] }]}
+                onPress={() => handleChangeEstado(pedido.id, 'listo')}
+              >
+                <Text style={styles.buttonText}>Listo</Text>
+              </TouchableOpacity>
+            )}
+            {mostrarBotonEntregado && (
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: colors.secondary }]}
+                onPress={() => handleChangeEstado(pedido.id, 'entregado')}
+              >
+                <Text style={styles.buttonText}>Entregado</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      );
+    }
   };
 
-  // Mostrar indicador de carga
+  // Loading
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -206,16 +303,28 @@ const OrdersAdminScreen = () => {
   return (
     <View style={styles.container}>
       <Text style={globalStyles.headerText}>Historial de Pedidos</Text>
-      {pedidos.length === 0 ? (
-        <Text style={styles.text}>No hay pedidos registrados</Text>
+
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Buscar por Nº de pedido o nombre de cliente..."
+        value={searchText}
+        onChangeText={setSearchText}
+      />
+
+      {listData.length === 0 ? (
+        <Text style={styles.text}>No se encontraron pedidos</Text>
       ) : (
         <FlatList
-          data={pedidos}
-          keyExtractor={(item) => item.id}
+          data={listData}
+          keyExtractor={(item, index) => {
+            if (item.type === 'header') {
+              return `header-${item.fecha}-${index}`;
+            }
+            return (item.data as Pedido).id;
+          }}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
-          // 2 COLUMNAS:
-          numColumns={2}
+          numColumns={1}
         />
       )}
     </View>
@@ -228,7 +337,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    padding: 16,
+    // Ajusta padding si quieres más/menos espacio lateral
   },
   text: {
     fontSize: 16,
@@ -243,14 +352,29 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingVertical: 20,
+    alignItems: 'center',
   },
-  // Estilos de cada "card" en 2 columnas
+  headerContainer: {
+    backgroundColor: colors.primaryLight,
+    padding: 8,
+    borderRadius: 4,
+    marginBottom: 4,
+    marginTop: 8,
+    width: '90%',
+    alignSelf: 'center',
+  },
+  headerTextFecha: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
   card: {
-    flex: 1, // Ocupa mitad del ancho (en 2 columnas)
-    margin: 8,
+    width: '250%',
+    alignSelf: 'center',
     backgroundColor: colors.primaryShades[50],
     padding: 16,
     borderRadius: 8,
+    marginBottom: 12,
     // Sombra
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -263,6 +387,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.primary,
     marginBottom: 8,
+    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',
@@ -294,5 +419,17 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  searchInput: {
+    marginVertical: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: colors.disabled,
+    alignSelf: 'center',
+    width: '90%',
   },
 });

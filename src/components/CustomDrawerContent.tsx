@@ -33,6 +33,13 @@ const CustomDrawerContent: React.FC<Props> = (props) => {
         label="Usuario"
         onPress={() => navigation.navigate('User')}
       />
+{userType !== 'admin' && (
+        <DrawerItem
+          label="Dashboard"
+          onPress={() => navigation.navigate('dashboard')}
+        />
+      )}
+
       {userType !== 'admin' && (
         <DrawerItem
           label="Pedidos"
@@ -46,6 +53,10 @@ const CustomDrawerContent: React.FC<Props> = (props) => {
           <DrawerItem
             label="Dashboard"
             onPress={() => navigation.navigate('Dashboard')}
+          />
+          <DrawerItem
+            label="lista de usuarios"
+            onPress={() => navigation.navigate('Create')}
           />
           <DrawerItem
             label="Historial de Pedidos"
