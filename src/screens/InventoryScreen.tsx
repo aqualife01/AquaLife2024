@@ -1,168 +1,305 @@
+// InventoryScreen.tsx (Versión con timestamp automático en Movimientos)
 import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
   TextInput,
-  Alert,
+  TouchableOpacity,
+  ActivityIndicator,
+  StyleSheet,
+  FlatList,
 } from 'react-native';
-import { globalStyles } from '../styles/globalStyles';
-import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebaseConfig'; // Asegúrate de importar `db` correctamente desde tu configuración de Firestore.
+import {
+  collection,
+  onSnapshot,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  getDocs,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 import Toast from 'react-native-toast-message';
 
+interface ArticuloDoc {
+  id: string;
+  nombre: string;
+  categoria: string;
+  cantidad: number;
+  unidad: string;
+}
+
+interface MovimientoDoc {
+  id: string;
+  // Usamos "timestamp" en vez de "fecha". 
+  timestamp: any;         // serverTimestamp() => FieldValue
+  tipoMovimiento: string; // "entrada" / "salida"
+  cantidad: number;
+  observaciones?: string;
+}
+
+interface SelectedItem {
+  id: string;
+}
+
+const colors = {
+  primary: '#00B5E2',
+  secondary: '#FF6565',
+};
+
 const InventoryScreen = () => {
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [editedItems, setEditedItems] = useState<any>({});
+  // Lista de artículos en Firestore
+  const [articulos, setArticulos] = useState<ArticuloDoc[]>([]);
+  
+  // Formulario (crear/editar artículo)
+  const [showForm, setShowForm] = useState(false);
+  const [nombre, setNombre] = useState('');
+  const [categoria, setCategoria] = useState('');
+  const [cantidad, setCantidad] = useState<number>(0);
+  const [unidad, setUnidad] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Cargar los datos de Firestore cuando el componente se monta
+  // Seleccionar un artículo para ver sus movimientos
+  const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null);
+  const [movimientos, setMovimientos] = useState<MovimientoDoc[]>([]);
+  
+  // Form para nuevo movimiento
+  const [tipoMovimiento, setTipoMovimiento] = useState<'entrada' | 'salida'>('entrada');
+  const [cantidadMovimiento, setCantidadMovimiento] = useState<number>(0);
+  const [obsMovimiento, setObsMovimiento] = useState('');
+
+  // Suscribirse a "Inventario"
   useEffect(() => {
-    const fetchInventory = async () => {
-      setLoading(true);
-      try {
-        const querySnapshot = await getDocs(collection(db, 'Botellones'));
-        if (querySnapshot.empty) {
-          showToast('error', 'No se encontraron elementos en el inventario.');
-        } else {
-          const items: any[] = [];
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            items.push({
-              id: doc.id,
-              name: data.name || '',
-              quantity: data.quantity || 0,
-              price: data.price || 0,
-              filledQuantity: data.filledQuantity || 0,
-              emptyQuantity: data.emptyQuantity || 0,
-              status: data.status || 'desconocido',
-              type: data.type || '',
-            });
-          });
-          setInventory(items);
-        }
-      } catch (error) {
-        console.error('Error al cargar el inventario:', error);
-        showToast('error', 'No se pudo cargar el inventario.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInventory();
+    const unsubscribe = onSnapshot(collection(db, 'Inventario'), (snapshot) => {
+      const data: ArticuloDoc[] = snapshot.docs.map((docu) => ({
+        id: docu.id,
+        ...(docu.data() as Omit<ArticuloDoc, 'id'>),
+      }));
+      setArticulos(data);
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Función para manejar cambios en los campos de cantidad, precio y estado llenado
-  const handleEditItem = (id: string, field: string, value: string) => {
-    setEditedItems((prev: any) => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        [field]: value,
-      },
-    }));
-  };
-
-  // Función para manejar el cambio en la cantidad total de botellones
-  const handleTotalQuantityChange = (id: string, text: string) => {
-    const newTotalQuantity = parseFloat(text.replace(/[^0-9.]/g, ''));
-    const currentItem = inventory.find((item) => item.id === id);
-
-    if (!isNaN(newTotalQuantity) && currentItem) {
-      const difference = newTotalQuantity - currentItem.quantity;
-
-      if (difference > 0) {
-        // Si hay una cantidad mayor (nuevos botellones), preguntamos si son llenos o vacíos
-        Alert.alert(
-          'Agregar nuevos botellones',
-          `Has agregado ${difference} botellones nuevos. ¿Quieres añadirlos como llenos o vacíos?`,
-          [
-            {
-              text: 'Llenos',
-              onPress: () => {
-                handleEditItem(id, 'filledQuantity', String(currentItem.filledQuantity + difference));
-              },
-            },
-            {
-              text: 'Vacíos',
-              onPress: () => {
-                handleEditItem(id, 'emptyQuantity', String(currentItem.emptyQuantity + difference));
-              },
-            },
-            { text: 'Cancelar', style: 'cancel' },
-          ],
-          { cancelable: true }
-        );
-      }
-
-      handleEditItem(id, 'quantity', text);
-    }
-  };
-
-  // Función para actualizar la cantidad, precio y estado llenado en Firestore
-  const handleUpdateItem = async (id: string) => {
-    const updatedItem = {
-      ...inventory.find((item) => item.id === id),
-      ...editedItems[id],
-    };
-
-    const newQuantity = parseFloat(updatedItem.quantity);
-    const newPrice = parseFloat(updatedItem.price);
-    const newFilledQuantity = parseFloat(updatedItem.filledQuantity);
-    const newEmptyQuantity = parseFloat(updatedItem.emptyQuantity);
-
-    // Validar los valores antes de proceder
-    if (
-      [newQuantity, newPrice, newFilledQuantity, newEmptyQuantity].some((val) => isNaN(val)) ||
-      newQuantity < 0 ||
-      newPrice < 0 ||
-      newFilledQuantity < 0 ||
-      newEmptyQuantity < 0 ||
-      newFilledQuantity + newEmptyQuantity > newQuantity
-    ) {
-      showToast('error', 'Cantidad o precio inválido. Por favor, ingresa un número válido.');
+  // Crear/Editar un artículo
+  const handleSave = async () => {
+    if (!nombre || !categoria || !unidad) {
+      showToast('error', 'Completa nombre, categoría y unidad.');
       return;
     }
+    setLoading(true);
 
     try {
-      const itemRef = doc(db, 'Botellones', id);
-      await updateDoc(itemRef, {
-        quantity: newQuantity,
-        price: newPrice,
-        filledQuantity: newFilledQuantity,
-        emptyQuantity: newEmptyQuantity,
-      });
-
-      setInventory((prevInventory) =>
-        prevInventory.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                quantity: newQuantity,
-                price: newPrice,
-                filledQuantity: newFilledQuantity,
-                emptyQuantity: newEmptyQuantity,
-              }
-            : item
-        )
-      );
-
-      showToast('success', `Producto actualizado correctamente.`);
-
-      setEditedItems((prev: any) => {
-        const updated = { ...prev };
-        delete updated[id];
-        return updated;
-      });
+      if (editingId) {
+        // Editar
+        await updateDoc(doc(db, 'Inventario', editingId), {
+          nombre,
+          categoria,
+          cantidad,
+          unidad,
+        });
+        showToast('success', 'Artículo actualizado.');
+        setEditingId(null);
+      } else {
+        // Crear
+        await addDoc(collection(db, 'Inventario'), {
+          nombre,
+          categoria,
+          cantidad,
+          unidad,
+        });
+        showToast('success', 'Artículo creado.');
+      }
+      // Reset form
+      setNombre('');
+      setCategoria('');
+      setCantidad(0);
+      setUnidad('');
+      setShowForm(false);
     } catch (error) {
-      console.error('Error al actualizar el producto:', error);
-      showToast('error', 'No se pudo actualizar el producto.');
+      console.error(error);
+      showToast('error', 'No se pudo guardar.');
+    }
+    setLoading(false);
+  };
+
+  // Seleccionar artículo para edición
+  const handleSelectEdit = (item: ArticuloDoc) => {
+    setEditingId(item.id);
+    setNombre(item.nombre);
+    setCategoria(item.categoria);
+    setCantidad(item.cantidad);
+    setUnidad(item.unidad);
+    setShowForm(true);
+  };
+
+  // Eliminar artículo
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'Inventario', id));
+      showToast('success', 'Artículo eliminado.');
+    } catch (err) {
+      console.error(err);
+      showToast('error', 'No se pudo eliminar.');
     }
   };
 
+  // Seleccionar un artículo para ver subcolección "Movimientos"
+  const handleSelectItem = async (id: string) => {
+    if (selectedItem?.id === id) {
+      // Si es el mismo, deselecciona
+      setSelectedItem(null);
+      setMovimientos([]);
+      return;
+    }
+    setSelectedItem({ id });
+
+    // Cargar subcolección Movimientos
+    const subColRef = collection(db, 'Inventario', id, 'Movimientos');
+    const docsSnap = await getDocs(subColRef);
+    const data: MovimientoDoc[] = docsSnap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<MovimientoDoc, 'id'>),
+    }));
+    setMovimientos(data);
+  };
+
+  // Agregar nuevo movimiento con timestamp
+  const handleAddMovimiento = async () => {
+    if (!selectedItem) return;
+    if (!cantidadMovimiento) {
+      showToast('error', 'Ingresa la cantidad del movimiento.');
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'Inventario', selectedItem.id, 'Movimientos'), {
+        // El "timestamp" se guarda con serverTimestamp()
+        timestamp: serverTimestamp(),
+        tipoMovimiento,
+        cantidad: cantidadMovimiento,
+        observaciones: obsMovimiento,
+      });
+      showToast('success', 'Movimiento registrado.');
+      // limpiar form
+      setTipoMovimiento('entrada');
+      setCantidadMovimiento(0);
+      setObsMovimiento('');
+      // recargar
+      handleSelectItem(selectedItem.id);
+    } catch (error) {
+      console.error(error);
+      showToast('error', 'No se pudo registrar el movimiento.');
+    }
+  };
+
+  // Renderiza cada artículo en la lista
+  const renderItemArticulo = ({ item }: { item: ArticuloDoc }) => {
+    const isSelected = selectedItem?.id === item.id;
+
+    return (
+      <View style={styles.itemContainer}>
+        <TouchableOpacity onPress={() => handleSelectItem(item.id)}>
+          <Text style={styles.itemTitle}>{item.nombre}</Text>
+          <Text style={styles.itemSubtitle}>
+            Categoría: {item.categoria} | Cantidad: {item.cantidad} {item.unidad}
+          </Text>
+        </TouchableOpacity>
+        
+        {/* Botones de edición/eliminación */}
+        <View style={styles.actionsRow}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => handleSelectEdit(item)}>
+            <Text style={styles.actionButtonText}>Editar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(item.id)}>
+            <Text style={styles.actionButtonText}>Eliminar</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Si el artículo está seleccionado, mostramos la sección de movimientos */}
+        {isSelected && (
+          <View style={styles.movimientosContainer}>
+            <Text style={styles.movTitle}>Movimientos del Artículo</Text>
+            
+            {movimientos.length === 0 ? (
+              <Text>No hay movimientos.</Text>
+            ) : (
+              movimientos.map((mov) => (
+                <View key={mov.id} style={styles.movItem}>
+                  {/* Convertimos serverTimestamp() en algo legible si deseas */}
+                  <Text>
+                    Fecha/Hora:{" "}
+                    {mov.timestamp
+                      ? new Date(mov.timestamp.toDate()).toLocaleString()
+                      : "—"}
+                  </Text>
+                  <Text>Tipo: {mov.tipoMovimiento}</Text>
+                  <Text>Cant: {mov.cantidad}</Text>
+                  {mov.observaciones && <Text>Obs: {mov.observaciones}</Text>}
+                </View>
+              ))
+            )}
+
+            {/* Form para nuevo movimiento */}
+            <View style={styles.tipoRow}>
+              <TouchableOpacity
+                style={[
+                  styles.tipoButton,
+                  tipoMovimiento === 'entrada' && styles.tipoButtonSelected,
+                ]}
+                onPress={() => setTipoMovimiento('entrada')}
+              >
+                <Text
+                  style={[
+                    styles.tipoButtonText,
+                    tipoMovimiento === 'entrada' && styles.tipoButtonTextSelected,
+                  ]}
+                >
+                  Entrada
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.tipoButton,
+                  tipoMovimiento === 'salida' && styles.tipoButtonSelected,
+                ]}
+                onPress={() => setTipoMovimiento('salida')}
+              >
+                <Text
+                  style={[
+                    styles.tipoButtonText,
+                    tipoMovimiento === 'salida' && styles.tipoButtonTextSelected,
+                  ]}
+                >
+                  Salida
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Cantidad"
+              keyboardType="numeric"
+              value={cantidadMovimiento ? String(cantidadMovimiento) : ''}
+              onChangeText={(text) => setCantidadMovimiento(Number(text) || 0)}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Observaciones (opcional)"
+              value={obsMovimiento}
+              onChangeText={setObsMovimiento}
+            />
+
+            <TouchableOpacity style={styles.saveButton} onPress={handleAddMovimiento}>
+              <Text style={styles.saveButtonText}>Registrar Movimiento</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Toast genérico
   const showToast = (type: 'success' | 'error', message: string) => {
     Toast.show({
       type,
@@ -174,125 +311,199 @@ const InventoryScreen = () => {
   };
 
   return (
-    <View style={globalStyles.container}>
-      <Text style={globalStyles.title}>Inventario General</Text>
-      {loading ? (
-        <ActivityIndicator size="large" color="#00B5E2" />
-      ) : (
-        <ScrollView contentContainerStyle={styles.gridContainer}>
-          {inventory.map((item) => (
-            <View key={item.id} style={styles.itemContainerGrid}>
-              <Text style={styles.itemText}>{item.name}</Text>
-              <View style={styles.inputContainerGrid}>
-                <Text style={styles.label}>Cantidad Total:</Text>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  value={editedItems[item.id]?.quantity ?? String(item.quantity)}
-                  onChangeText={(text) => handleTotalQuantityChange(item.id, text)}
-                />
-              </View>
-              {item.name.toLowerCase().includes('botellón') && (
-                <>
-                  <View style={styles.inputContainerGrid}>
-                    <Text style={styles.label}>Cantidad Llenos:</Text>
-                    <TextInput
-                      style={styles.input}
-                      keyboardType="numeric"
-                      value={editedItems[item.id]?.filledQuantity ?? String(item.filledQuantity || 0)}
-                      onChangeText={(text) => {
-                        const newFilledQuantity = parseFloat(text.replace(/[^0-9.]/g, ''));
-                        const totalQuantity = parseFloat(
-                          editedItems[item.id]?.quantity ?? String(item.quantity)
-                        );
-                        if (!isNaN(newFilledQuantity) && newFilledQuantity <= totalQuantity) {
-                          handleEditItem(item.id, 'filledQuantity', text);
-                          handleEditItem(
-                            item.id,
-                            'emptyQuantity',
-                            String(totalQuantity - newFilledQuantity)
-                          );
-                        }
-                      }}
-                    />
-                  </View>
-                  <View style={styles.inputContainerGrid}>
-                    <Text style={styles.label}>Cantidad Vacíos:</Text>
-                    <TextInput
-                      style={styles.input}
-                      keyboardType="numeric"
-                      value={editedItems[item.id]?.emptyQuantity ?? String(item.emptyQuantity || 0)}
-                      editable={false}
-                    />
-                  </View>
-                </>
-              )}
-              <View style={styles.inputContainerGrid}>
-                <Text style={styles.label}>Precio Unitario:</Text>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  value={editedItems[item.id]?.price ?? String(item.price || 0)}
-                  onChangeText={(text) =>
-                    handleEditItem(item.id, 'price', text.replace(/[^0-9.]/g, ''))
-                  }
-                />
-              </View>
-              <TouchableOpacity
-                style={globalStyles.primaryButton}
-                onPress={() => handleUpdateItem(item.id)}
-              >
-                <Text style={globalStyles.primaryButtonText}>Actualizar</Text>
-              </TouchableOpacity>
-              <Text style={styles.itemText}>Estado: {item.status}</Text>
-            </View>
-          ))}
-        </ScrollView>
+    <View style={styles.container}>
+      <Text style={styles.header}>Gestión de Inventario</Text>
+      <TouchableOpacity style={styles.addButton} onPress={() => setShowForm(!showForm)}>
+        <Text style={styles.addButtonText}>{showForm ? 'Cerrar' : '+ Añadir'}</Text>
+      </TouchableOpacity>
+
+      {/* Form para crear/editar artículo */}
+      {showForm && (
+        <View style={styles.formContainer}>
+          <Text style={styles.formTitle}>
+            {editingId ? 'Editar Artículo' : 'Nuevo Artículo'}
+          </Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Nombre"
+            value={nombre}
+            onChangeText={setNombre}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Categoría"
+            value={categoria}
+            onChangeText={setCategoria}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Cantidad"
+            keyboardType="numeric"
+            value={cantidad ? String(cantidad) : ''}
+            onChangeText={(text) => setCantidad(Number(text) || 0)}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Unidad (unidades, litros, etc.)"
+            value={unidad}
+            onChangeText={setUnidad}
+          />
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : (
+            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+              <Text style={styles.saveButtonText}>
+                {editingId ? 'Guardar Cambios' : 'Crear'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
+
+      {/* Lista principal de artículos */}
+      <FlatList
+        data={articulos}
+        renderItem={renderItemArticulo}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      />
+
       <Toast />
     </View>
   );
 };
 
+export default InventoryScreen;
+
+// Estilos
 const styles = StyleSheet.create({
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  itemContainerGrid: {
+  container: {
+    flex: 1,
     backgroundColor: '#F5F5F5',
-    padding: 20,
-    margin: 10,
-    borderRadius: 10,
-    width: '22%', // Ajuste para mostrar 4 columnas
+    padding: 16,
   },
-  itemText: {
-    fontSize: 18,
-    color: '#333',
+  header: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
     marginBottom: 10,
   },
-  inputContainerGrid: {
-    marginBottom: 10,
+  addButton: {
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: 8,
+    alignSelf: 'center',
+    marginVertical: 8,
   },
-  label: {
+  addButtonText: {
+    color: '#fff',
     fontSize: 16,
-    color: '#333',
-    marginBottom: 5,
+  },
+  formContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  formTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   input: {
+    backgroundColor: '#fafafa',
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#CCCCCC',
-    borderRadius: 5,
-    padding: 10,
-    fontSize: 16,
+    borderColor: '#ccc',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
   },
-  noItemsText: {
-    textAlign: 'center',
-    color: '#757575',
-    fontSize: 16,
-    marginVertical: 20,
+  saveButton: {
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  itemContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    marginBottom: 10,
+    padding: 12,
+    // Sombra leve
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  itemSubtitle: {
+    fontSize: 12,
+    color: '#555',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 6,
+  },
+  actionButton: {
+    backgroundColor: colors.secondary,
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 6,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  movimientosContainer: {
+    marginTop: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 8,
+  },
+  movTitle: {
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  movItem: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 6,
+    padding: 6,
+    marginBottom: 6,
+  },
+  tipoRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+    justifyContent: 'space-around',
+  },
+  tipoButton: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  tipoButtonSelected: {
+    backgroundColor: colors.primary,
+  },
+  tipoButtonText: {
+    color: colors.primary,
+    fontWeight: 'bold',
+  },
+  tipoButtonTextSelected: {
+    color: '#fff',
   },
 });
-
-export default InventoryScreen;
