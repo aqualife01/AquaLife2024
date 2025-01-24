@@ -9,20 +9,23 @@ import {
   FlatList,
   ScrollView,
 } from 'react-native';
-import { collection, onSnapshot, addDoc } from 'firebase/firestore';
-import { db } from '../../firebaseConfig'; // Ajusta la ruta a tu config
+import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { db } from '../../firebaseConfig';
 import Toast from 'react-native-toast-message';
 
-// Definimos interfaces para describir documentos en cada colección:
+// Interfaz para documentos en la colección "usuarios"
 interface UsuarioDoc {
   id: string;
   nombre: string;
   email?: string;
   telefono?: string;
   direccion?: string;
-  password?: string; 
+  password?: string;
+  tipo?: string; // "admin"
 }
 
+// Interfaz para documentos en la colección "clientes"
 interface ClienteDoc {
   id: string;
   nombre: string;
@@ -30,6 +33,7 @@ interface ClienteDoc {
   telefono?: string;
   direccion?: string;
   password?: string;
+  tipo?: string; // "cliente"
 }
 
 // Colores de ejemplo
@@ -39,78 +43,95 @@ const colors = {
 };
 
 const CreateUserScreen = () => {
-  // Estados para las listas de cada colección
+  // Estados para las listas
   const [listaUsuarios, setListaUsuarios] = useState<UsuarioDoc[]>([]);
   const [listaClientes, setListaClientes] = useState<ClienteDoc[]>([]);
 
-  // Formulario expandible
+  // Formulario
   const [showForm, setShowForm] = useState(false);
-
-  // Campos del formulario
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
   const [direccion, setDireccion] = useState('');
   const [password, setPassword] = useState('');
-  // Seleccionar si vamos a guardar en "Usuarios" o "Clientes"
+  // Determina si se crea en "usuarios" (tipo=admin) o "Clientes" (tipo=cliente)
   const [tipo, setTipo] = useState<'usuario' | 'cliente'>('cliente');
-
   const [loading, setLoading] = useState(false);
 
-  // 1) Suscribirse a cambios en la colección "Usuarios"
+  // Suscribirse a "usuarios"
   useEffect(() => {
     const unsubscribeUsers = onSnapshot(collection(db, 'usuarios'), (snapshot) => {
-      const data: UsuarioDoc[] = snapshot.docs.map((doc) => {
-        const docData = doc.data() as Omit<UsuarioDoc, 'id'>;
+      const data: UsuarioDoc[] = snapshot.docs.map((documento) => {
+        const docData = documento.data() as Omit<UsuarioDoc, 'id'>;
         return {
-          id: doc.id,
+          id: documento.id,
           ...docData,
         };
       });
       setListaUsuarios(data);
     });
 
-    // 2) Suscribirse a cambios en la colección "Clientes"
+    // Suscribirse a "Clientes"
     const unsubscribeClients = onSnapshot(collection(db, 'Clientes'), (snapshot) => {
-      const data: ClienteDoc[] = snapshot.docs.map((doc) => {
-        const docData = doc.data() as Omit<ClienteDoc, 'id'>;
+      const data: ClienteDoc[] = snapshot.docs.map((documento) => {
+        const docData = documento.data() as Omit<ClienteDoc, 'id'>;
         return {
-          id: doc.id,
+          id: documento.id,
           ...docData,
         };
       });
       setListaClientes(data);
     });
 
-    // limpiar suscripciones
     return () => {
       unsubscribeUsers();
       unsubscribeClients();
     };
   }, []);
 
-  // Manejar creación de nuevo documento
+  // Crear nuevo user/cliente TANTO en Auth como en Firestore
   const handleCreate = async () => {
     if (!nombre || !email || !telefono || !direccion) {
       showToast('error', 'Completa todos los campos requeridos.');
       return;
     }
-    setLoading(true);
-    try {
-      // Según el "tipo" seleccionado, usamos la colección adecuada
-      const colName = tipo === 'usuario' ? 'Usuarios' : 'Clientes';
+    if (!password) {
+      showToast('error', 'Debes especificar una contraseña para el Auth.');
+      return;
+    }
 
-      await addDoc(collection(db, colName), {
+    setLoading(true);
+
+    try {
+      // 1. Crear en Firebase Auth
+      const auth = getAuth();
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;  // user.uid
+
+      // 2. Crear en Firestore
+      let collectionName = 'Clientes'; // por defecto
+      let valorTipo = 'cliente';
+
+      if (tipo === 'usuario') {
+        collectionName = 'usuarios';
+        valorTipo = 'admin';
+      }
+
+      // Usamos setDoc para que el doc ID en Firestore coincida con el UID de Auth
+      await setDoc(doc(db, collectionName, user.uid), {
         nombre,
         email,
         telefono,
         direccion,
-        password, 
+        // OJO: No es buena práctica guardar password en texto plano,
+        // pero si lo deseas, aquí lo guardamos:
+        password,
+        tipo: valorTipo,
       });
 
-      showToast('success', `Se creó un ${tipo} correctamente.`);
+      showToast('success', `Se creó un ${valorTipo} correctamente en Auth y Firestore.`);
 
-      // Limpiar campos y cerrar form
+      // Limpiar campos
       setNombre('');
       setEmail('');
       setTelefono('');
@@ -137,19 +158,21 @@ const CreateUserScreen = () => {
     });
   };
 
-  // Render item en lista de Usuarios
+  // Render item en lista de usuarios
   const renderItemUsuario = ({ item }: { item: UsuarioDoc }) => (
     <View style={styles.listItem}>
       <Text style={styles.listItemText}>{item.nombre}</Text>
       <Text style={styles.listItemSub}>{item.email}</Text>
+      {item.tipo && <Text style={styles.listItemSub}>{item.tipo}</Text>}
     </View>
   );
 
-  // Render item en lista de Clientes
+  // Render item en lista de clientes
   const renderItemCliente = ({ item }: { item: ClienteDoc }) => (
     <View style={styles.listItem}>
       <Text style={styles.listItemText}>{item.nombre}</Text>
       <Text style={styles.listItemSub}>{item.email}</Text>
+      {item.tipo && <Text style={styles.listItemSub}>{item.tipo}</Text>}
     </View>
   );
 
@@ -174,15 +197,12 @@ const CreateUserScreen = () => {
             {tipo === 'cliente' ? 'Registrar Cliente' : 'Registrar Usuario'}
           </Text>
 
-          {/* Campo Nombre */}
           <TextInput
             style={styles.input}
             placeholder="Nombre completo"
             value={nombre}
             onChangeText={setNombre}
           />
-
-          {/* Campo Email */}
           <TextInput
             style={styles.input}
             placeholder="Correo"
@@ -190,8 +210,6 @@ const CreateUserScreen = () => {
             onChangeText={setEmail}
             keyboardType="email-address"
           />
-
-          {/* Campo Telefono */}
           <TextInput
             style={styles.input}
             placeholder="Teléfono"
@@ -199,25 +217,21 @@ const CreateUserScreen = () => {
             onChangeText={setTelefono}
             keyboardType="phone-pad"
           />
-
-          {/* Campo Direccion */}
           <TextInput
             style={styles.input}
             placeholder="Dirección"
             value={direccion}
             onChangeText={setDireccion}
           />
-
-          {/* Campo Password (opc) */}
           <TextInput
             style={styles.input}
-            placeholder="Contraseña (opcional)"
+            placeholder="Contraseña"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
 
-          {/* Seleccionar tipo: usuario o cliente */}
+          {/* Botones para tipo: usuario (admin) o cliente */}
           <View style={styles.tipoContainer}>
             <TouchableOpacity
               style={[
@@ -254,7 +268,6 @@ const CreateUserScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Botón Confirmar */}
           {loading ? (
             <ActivityIndicator size="large" color={colors.primary} />
           ) : (
@@ -265,9 +278,9 @@ const CreateUserScreen = () => {
         </ScrollView>
       )}
 
-      {/* Vista en 2 columnas: lista de usuarios a la IZQ y clientes a la DER */}
+      {/* Dos columnas: usuarios (izq) y clientes (der) */}
       <View style={styles.rowContainer}>
-        {/* Columna Usuarios */}
+        {/* Usuarios */}
         <View style={styles.column}>
           <Text style={styles.columnTitle}>Lista de Usuarios</Text>
           {listaUsuarios.length === 0 ? (
@@ -281,7 +294,7 @@ const CreateUserScreen = () => {
           )}
         </View>
 
-        {/* Columna Clientes */}
+        {/* Clientes */}
         <View style={styles.column}>
           <Text style={styles.columnTitle}>Lista de Clientes</Text>
           {listaClientes.length === 0 ? (
@@ -303,7 +316,6 @@ const CreateUserScreen = () => {
 
 export default CreateUserScreen;
 
-// Estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,

@@ -3,208 +3,161 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ImageBackground,
   Image,
   StyleSheet,
   ScrollView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { globalStyles } from '../styles/globalStyles';
+import Carousel from '../components/Carousel';
 
 const HomeScreen = ({ navigation }: any) => {
   const [hoveredBox, setHoveredBox] = useState<string | null>(null);
 
   return (
-    <ImageBackground
-      source={require('../assets/background.png')} // Imagen de fondo
-      style={styles.backgroundImage}
-    >
-      {/* Barra superior */}
-      <View style={styles.topBar}>
-        <Image
-          source={require('../assets/logo.png')} // Logo
-          style={styles.logo}
-        />
-        <Text style={styles.companyName}>AquaLife</Text>
-      </View>
+    <View style={styles.container}>
+      {/* Barra verde delgada con logo a la izquierda y botones a la derecha */}
+      <LinearGradient
+        colors={['#0D9488', '#0F766E', '#0D9488']}
+        style={styles.topBarContainer}
+      >
+        <View style={styles.leftSection}>
+          <Image
+            source={require('../assets/logo.png')}
+            style={styles.logo}
+          />
+          <Text style={styles.companyName}>AquaLife</Text>
+        </View>
 
-      {/* Contenido principal */}
+        <View style={styles.rightSection}>
+          <TouchableOpacity
+            style={[globalStyles.primaryButton, styles.smallButton]}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={globalStyles.primaryButtonText}>Iniciar Sesión</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              globalStyles.primaryButton,
+              styles.smallButton,
+              styles.secondaryButton,
+            ]}
+            onPress={() => navigation.navigate('Register')}
+          >
+            <Text style={styles.secondaryButtonText}>Registrarse</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+
+      {/* Contenido principal scrolleable */}
       <ScrollView contentContainerStyle={styles.contentContainer}>
-        <View style={styles.sectionContainer}>
-          <Text style={styles.titleText}>Bienvenidos a AquaLife</Text>
-          <Text style={styles.subTitleText}>
-            Proporcionando soluciones de agua pura para tu familia y negocio.
+        {/* Título de bienvenida */}
+        <View style={styles.welcomeContainer}>
+          <Text style={styles.heroTitle}>¡Bienvenido a AquaLife!</Text>
+          <Text style={styles.heroSubtitle}>
+            Soluciones de agua purificada para tu hogar y negocio
           </Text>
         </View>
 
-        <View style={styles.missionVisionContainer}>
-          <TouchableOpacity
-            style={[
-              styles.missionVisionBox,
-              hoveredBox === 'mission' && styles.hoveredBox,
-            ]}
-            activeOpacity={0.8}
-            onPress={() => {}}
-            onPressIn={() => setHoveredBox('mission')}
-            onPressOut={() => setHoveredBox(null)}
-          >
-            <Text style={styles.boxTitle}>Nuestra Misión</Text>
-            <Text style={styles.boxText}>
-              Ofrecer soluciones de agua de alta calidad que enriquezcan vidas y
-              apoyen a las comunidades.
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.missionVisionBox,
-              hoveredBox === 'vision' && styles.hoveredBox,
-            ]}
-            activeOpacity={0.8}
-            onPress={() => {}}
-            onPressIn={() => setHoveredBox('vision')}
-            onPressOut={() => setHoveredBox(null)}
-          >
-            <Text style={styles.boxTitle}>Nuestra Visión</Text>
-            <Text style={styles.boxText}>
-              Ser el proveedor líder de soluciones sostenibles de agua a nivel
-              mundial.
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* Sección Misión y Visión */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>¿Quiénes Somos?</Text>
+          <Text style={styles.sectionSubtitle}>
+            Conoce nuestra misión y visión
+          </Text>
 
-        <View style={styles.callToActionContainer}>
-          <Text style={styles.callToActionText}>¡Únete a AquaLife Hoy!</Text>
-          <View style={styles.buttonContainer}>
+          <View style={styles.missionVisionContainer}>
             <TouchableOpacity
-              style={globalStyles.primaryButton}
-              onPress={() => navigation.navigate('Login')}
+              style={[
+                styles.missionVisionBox,
+                hoveredBox === 'mission' && styles.hoveredBox,
+              ]}
+              activeOpacity={0.8}
+              onPressIn={() => setHoveredBox('mission')}
+              onPressOut={() => setHoveredBox(null)}
             >
-              <Text style={globalStyles.primaryButtonText}>Iniciar Sesión</Text>
+              <Text style={styles.boxTitle}>Nuestra Misión</Text>
+              <Text style={styles.boxText}>
+                Ofrecer soluciones de agua de alta calidad que enriquezcan vidas
+                y apoyen a las comunidades.
+              </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[globalStyles.primaryButton, styles.secondaryButton]}
-              onPress={() => navigation.navigate('Register')}
+              style={[
+                styles.missionVisionBox,
+                hoveredBox === 'vision' && styles.hoveredBox,
+              ]}
+              activeOpacity={0.8}
+              onPressIn={() => setHoveredBox('vision')}
+              onPressOut={() => setHoveredBox(null)}
             >
-              <Text style={styles.secondaryButtonText}>Registrarse</Text>
+              <Text style={styles.boxTitle}>Nuestra Visión</Text>
+              <Text style={styles.boxText}>
+                Ser el proveedor líder de soluciones sostenibles de agua
+                a nivel mundial.
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* Carrusel con imágenes en tamaño original y fondo difuminado */}
+        <View style={{ marginVertical: 20 }}>
+          <Carousel />
+        </View>
+
+        {/* Sección Ubicación */}
         <View style={styles.locationContainer}>
-          <Text style={styles.boxTitle}>¿Dónde encontrarnos?</Text>
-          <Text style={styles.boxText}>
-            Calle Mama Tere, CC Esquina de Tipuro, Nivel PB Local 1, Sector
-            Tipuro, Maturín, Monagas, Venezuela.
+          <Text style={styles.locationTitle}>¿Dónde encontrarnos?</Text>
+          <Text style={styles.locationText}>
+            Calle Mama Tere, CC Esquina de Tipuro, Nivel PB Local 1,
+            Sector Tipuro, Maturín, Monagas, Venezuela.
           </Text>
         </View>
       </ScrollView>
-    </ImageBackground>
+    </View>
   );
 };
 
+/* ----------------------- ESTILOS ------------------------ */
 const styles = StyleSheet.create({
-  backgroundImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  container: {
+    flex: 1,
+    backgroundColor: '#F0F4F8',
   },
-  topBar: {
-    width: '100%',
-    height: 80,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+
+  /* Barra superior (verde) */
+  topBarContainer: {
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 15,
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 20,
+  },
+  leftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   logo: {
-    width: 50,
-    height: 50,
+    width: 40,
+    height: 40,
     resizeMode: 'contain',
   },
   companyName: {
     color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  contentContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  sectionContainer: {
-    marginBottom: 30,
-    alignItems: 'center',
-  },
-  titleText: {
-    fontSize: 32,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  subTitleText: {
-    fontSize: 18,
-    color: '#CCCCCC',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  missionVisionContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 30,
-  },
-  missionVisionBox: {
-    width: '45%',
-    padding: 15,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 10,
-    elevation: 5, // Sustituto de sombras en Android
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-  },
-  hoveredBox: {
-    backgroundColor: '#e0f7fa',
-  },
-  boxTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-    color: '#0D9488',
-  },
-  boxText: {
-    fontSize: 14,
-    color: '#555555',
-    textAlign: 'center',
-  },
-  locationContainer: {
-    width: '100%',
-    padding: 20,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 10,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    marginTop: 30,
-  },
-  callToActionContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  callToActionText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 20,
+    marginLeft: 8,
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '90%',
+  smallButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 8,
   },
   secondaryButton: {
     backgroundColor: '#FFFFFF',
@@ -213,8 +166,106 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: '#0D9488',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
+  /* Contenido principal */
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  welcomeContainer: {
+    marginVertical: 15,
+    alignItems: 'center',
+  },
+  heroTitle: {
+    fontSize: 26,
+    color: '#0D9488',
+    fontWeight: 'bold',
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+  },
+
+  /* Sección Misión y Visión */
+  sectionContainer: {
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  sectionTitle: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#0D9488',
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    color: '#555',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  missionVisionContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  missionVisionBox: {
+    width: '47%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  hoveredBox: {
+    backgroundColor: '#E6FAF9',
+  },
+  boxTitle: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#0D9488',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  boxText: {
+    fontSize: 14,
+    color: '#333333',
+    textAlign: 'center',
+  },
+
+  /* Sección Ubicación */
+  locationContainer: {
+    marginTop: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  locationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0D9488',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#333',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 
