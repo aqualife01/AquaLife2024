@@ -103,7 +103,7 @@ const DashboardScreen = () => {
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>Datos de la Empresa</Text>
           <Text style={styles.infoText}>
-            RIF: <Text style={styles.boldText}>71347267</Text>
+            RIF: <Text style={styles.boldText}> J- 50447281-6</Text>
           </Text>
           <Text style={styles.infoText}>
             Nombre: <Text style={styles.boldText}>AQUALIFE</Text>

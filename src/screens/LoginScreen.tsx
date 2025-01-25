@@ -1,3 +1,4 @@
+// LoginScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -8,19 +9,22 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../types/navigation';
-import { globalStyles } from '../styles/globalStyles';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { db } from '../../firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { RootStackParamList } from '../types/navigation'; // Ajusta según tu proyecto
+import { globalStyles } from '../styles/globalStyles'; // Ajusta según tu proyecto
+import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'firebase/auth';
+import { db } from '../../firebaseConfig'; // Ajusta la ruta a tu config
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import Toast from 'react-native-toast-message';
-import { collection, query, where, getDocs } from 'firebase/firestore';
 
+// Ajusta si usas un tipo de Navigation distinto
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
 interface Props {
   navigation: LoginScreenNavigationProp;
 }
+
+// Regex simple para validar un correo (ajusta si lo requieres más estricto)
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -32,68 +36,107 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       showToast('error', 'Por favor ingresa correo y contraseña.');
       return;
     }
-  
+    // Validar formato de email
+    if (!emailRegex.test(email.trim())) {
+      showToast('error', 'El formato del correo no es válido.');
+      return;
+    }
+
     const auth = getAuth();
     setLoading(true);
-  
+
     try {
-      // Autenticar al usuario usando Firebase Authentication
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Autenticar al usuario con Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
-  
-      // Buscar el usuario en 'Clientes' por email
+
+      // 1) Buscar al usuario en "Clientes"
+      //    Si no está, podrías buscar en "usuarios" (como en tu ejemplo).
       let userData;
       let userType;
-      const clientesQuery = query(collection(db, 'Clientes'), where('email', '==', email));
+      const clientesQuery = query(collection(db, 'Clientes'), where('email', '==', email.trim()));
       const clientesSnapshot = await getDocs(clientesQuery);
-  
+
       if (!clientesSnapshot.empty) {
         userData = clientesSnapshot.docs[0].data();
-        userType = userData?.tipo; // Tipo de usuario de 'Clientes'
+        userType = userData?.tipo; // "cliente"
       } else {
         // Si no existe en 'Clientes', buscar en 'usuarios'
-        const usuariosQuery = query(collection(db, 'usuarios'), where('email', '==', email));
+        const usuariosQuery = query(collection(db, 'usuarios'), where('email', '==', email.trim()));
         const usuariosSnapshot = await getDocs(usuariosQuery);
-  
+
         if (!usuariosSnapshot.empty) {
           userData = usuariosSnapshot.docs[0].data();
-          userType = userData?.tipo; // Tipo de usuario de 'usuarios'
+          userType = userData?.tipo; // "admin", "usuario", etc.
         } else {
-          throw new Error('No se pudo encontrar la información del usuario.');
+          throw new Error('No se pudo encontrar la información del usuario en la BD.');
         }
       }
-  
+
+      // 2) Verificar si está "activo === false"
+      if (userData?.activo === false) {
+        // Cerrar la sesión para que no quede logueado un usuario inactivo
+        await signOut(auth);
+        setLoading(false);
+        showToast('error', 'Su cuenta está suspendida. No puede iniciar sesión.');
+        return;
+      }
+
+      // 3) Iniciar correctamente
       setLoading(false);
       showToast('success', 'Inicio de sesión exitoso. Accediendo...');
-  
+      // Redirige según el userType
       if (userType === 'cliente' || userType === 'admin') {
+        // Ejemplo: MainDrawer
         navigation.navigate('MainDrawer', { userType });
       } else {
-        throw new Error('Tipo de usuario desconocido.');
+        showToast('error', 'Tipo de usuario desconocido.');
       }
-      
     } catch (error: any) {
       setLoading(false);
-      console.error(error.message);
-  
-      switch (error.code) {
-        case 'auth/user-not-found':
-          showToast('error', 'El correo no está registrado.');
-          break;
-        case 'auth/wrong-password':
-          showToast('error', 'Correo o contraseña incorrectos.');
-          break;
-        case 'auth/invalid-email':
-          showToast('error', 'El formato del correo no es válido.');
-          break;
-        default:
-          showToast('error', error.message || 'Ha ocurrido un error.');
+
+      if (error && error.code) {
+        // Errores comunes de Firebase Auth
+        switch (error.code) {
+          case 'auth/user-not-found':
+            showToast('error', 'El correo no está registrado.');
+            break;
+          case 'auth/wrong-password':
+            showToast('error', 'Correo o contraseña incorrectos.');
+            break;
+          case 'auth/invalid-email':
+            showToast('error', 'El formato del correo no es válido.');
+            break;
+          default:
+            showToast('error', error.message || 'Ha ocurrido un error.');
+        }
+      } else {
+        showToast('error', error?.message || 'Ha ocurrido un error.');
       }
     }
   };
-  
-  
 
+  // Manejar "Olvidaste tu contraseña?"
+  const handleForgotPassword = async () => {
+    if (!email) {
+      showToast('error', 'Ingresa tu correo en la casilla de email.');
+      return;
+    }
+    if (!emailRegex.test(email.trim())) {
+      showToast('error', 'El formato del correo no es válido.');
+      return;
+    }
+    // Intentar enviar correo de reseteo
+    try {
+      const auth = getAuth();
+      await sendPasswordResetEmail(auth, email.trim());
+      showToast('success', 'Se ha enviado un correo para reestablecer la contraseña.');
+    } catch (err: any) {
+      showToast('error', 'No se pudo enviar el correo de reseteo. Verifica tu email.');
+    }
+  };
+
+  // Toast genérico
   const showToast = (type: 'success' | 'error', message: string) => {
     Toast.show({
       type,
@@ -104,30 +147,17 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     });
   };
 
-  const showToastWithAction = (
-    type: 'success' | 'error',
-    message: string,
-    actionText: string,
-    actionCallback: () => void
-  ) => {
-    Toast.show({
-      type,
-      text1: type === 'success' ? '¡Éxito!' : 'Error',
-      text2: message,
-      position: 'top',
-      visibilityTime: 4000,
-      onPress: actionCallback,
-      props: { actionText },
-    });
-  };
-
   return (
     <>
-      <View style={[globalStyles.container, styles.outerContainer]}>
+      <View style={[styles.outerContainer]}>
         <View style={styles.innerContainer}>
-          <Text style={[globalStyles.title, styles.titleText]}>Iniciar Sesión</Text>
+          <Text style={[styles.titleText]}>
+            Iniciar Sesión
+          </Text>
+
+          {/* EMAIL */}
           <TextInput
-            style={[globalStyles.input, styles.input]}
+            style={[styles.input]}
             placeholder="Email"
             placeholderTextColor="#888888"
             value={email}
@@ -135,24 +165,41 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             autoCapitalize="none"
             keyboardType="email-address"
           />
+
+          {/* CONTRASEÑA */}
           <TextInput
-            style={[globalStyles.input, styles.input]}
+            style={[styles.input]}
             placeholder="Contraseña"
             placeholderTextColor="#888888"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
-          {loading && <ActivityIndicator size="large" color="#00B5E2" />}
-          <TouchableOpacity style={globalStyles.primaryButton} onPress={handleLogin} disabled={loading}>
-            <Text style={globalStyles.primaryButtonText}>Ingresar</Text>
+
+          {loading && <ActivityIndicator size="large" color={colors.primary} />}
+
+          {/* Botón "Ingresar" */}
+          <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
+            <Text style={styles.loginButtonText}>Ingresar</Text>
           </TouchableOpacity>
+
+          {/* ¿Olvidaste tu contraseña? */}
+          <TouchableOpacity style={styles.forgotButton} onPress={handleForgotPassword}>
+            <Text style={styles.forgotButtonText}>¿Olvidaste tu contraseña?</Text>
+          </TouchableOpacity>
+
+          {/* No tienes cuenta -> Registro */}
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>¿No tienes cuenta?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
               <Text style={styles.registerLink}>Regístrate</Text>
             </TouchableOpacity>
           </View>
+
+          {/* ¿Tienes problemas? (ejemplo de mensaje) */}
+          <TouchableOpacity style={styles.helpButton} onPress={() => showToast('error', 'Contacta al soporte para más ayuda.')}>
+            <Text style={styles.helpButtonText}>¿Tienes problemas para iniciar sesión?</Text>
+          </TouchableOpacity>
         </View>
       </View>
       <Toast />
@@ -160,54 +207,92 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
+export default LoginScreen;
+
+// ================= Estilos =================
+const colors = {
+  primary: '#00B5E2',
+  secondary: '#FF6565',
+};
+
 const styles = StyleSheet.create({
   outerContainer: {
+    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: '#F5F5F5',
+    padding: 16,
   },
   innerContainer: {
-    width: '90%',
+    width: '100%',
     maxWidth: 400,
-    padding: 20,
-    backgroundColor: '#FFFFFF',
+    alignSelf: 'center',
+    backgroundColor: '#fff',
     borderRadius: 10,
-    elevation: 5,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 5,
+    shadowRadius: 4,
+    elevation: 3,
   },
   titleText: {
-    marginBottom: 20,
-    textAlign: 'center',
     fontSize: 22,
     fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
   },
   input: {
-    marginBottom: 15,
-    borderColor: '#CCCCCC',
+    marginBottom: 12,
+    borderColor: '#ccc',
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 15,
+    paddingHorizontal: 14,
     height: 50,
+    fontSize: 16,
+    color: '#333',
+  },
+  loginButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginVertical: 6,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginVertical: 4,
+  },
+  forgotButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
   registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
+    marginTop: 12,
   },
   registerText: {
-    fontSize: 16,
-    color: '#757575',
+    fontSize: 14,
+    color: '#333',
   },
   registerLink: {
-    fontSize: 16,
-    color: '#00B5E2',
-    marginLeft: 5,
+    fontSize: 14,
+    color: colors.primary,
     fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  helpButton: {
+    marginTop: 10,
+    alignSelf: 'center',
+  },
+  helpButtonText: {
+    color: '#999',
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
 });
-
-export default LoginScreen;
