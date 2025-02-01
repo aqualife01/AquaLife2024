@@ -1,4 +1,5 @@
 // RegisterScreen.tsx
+
 import React, { useState } from 'react';
 import {
   View,
@@ -10,8 +11,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { db } from '../../firebaseConfig'; // Tu configuración de Firestore
-import { collection, query, where, getDocs, setDoc, doc } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  setDoc,
+  doc,
+} from 'firebase/firestore';
 import Toast from 'react-native-toast-message';
 
 const colors = {
@@ -47,59 +55,107 @@ const RegisterScreen = ({ navigation }: any) => {
   const [telefono, setTelefono] = useState('');
   const [direccion, setDireccion] = useState('');
   const [email, setEmail] = useState('');
+
+  // Contraseña + Confirmar
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Mostrar/ocultar contraseña
+  const [showPass, setShowPass] = useState(false);
+  const [showPassConfirm, setShowPassConfirm] = useState(false);
+
   const [loading, setLoading] = useState(false);
 
-  // Expresiones regulares para validaciones básicas
-  const nameRegex = /^[A-Za-zÁÉÍÓÚÑáéíóúñ\s]+$/;    // Solo letras y espacios
-  const phoneRegex = /^[0-9]+$/;                   // Solo dígitos
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;  // Patrón sencillo de email
+  // ==================== Reglas de validación ====================
+  // Requerimos (por ejemplo):
+  // - Mínimo 8 caracteres
+  // - Al menos 1 mayúscula, 1 minúscula, 1 dígito
+  // - Al menos 1 caracter especial de un set "seguro" (!@#$%^&*()_-+=)
+  // - No tener espacios
+  const passwordRegex =
+    /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()_\-+=])[A-Za-z\d!@#$%^&*()_\-+=]{8,}$/;
 
+  // Requerimos solo letras y espacios en nombre
+  const nameRegex = /^[A-Za-zÁÉÍÓÚÑáéíóúñ\s]+$/;
+  // Teléfono solo dígitos
+  const phoneRegex = /^[0-9]+$/;
+  // Email sencillo
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // ==================== Función para medir seguridad de la pass ====================
+  function getPasswordStrength(pw: string): string {
+    if (pw.length === 0) return ''; // sin texto
+
+    let score = 0;
+
+    if (pw.length >= 8) score++; // +1 longitud >= 8
+    if (/[A-Z]/.test(pw)) score++; // mayúscula
+    if (/[a-z]/.test(pw)) score++; // minúscula
+    if (/\d/.test(pw)) score++;    // dígito
+    if (/[!@#$%^&*()_\-+=]/.test(pw)) score++; // caracter especial
+
+    if (score <= 2) return 'Débil';
+    if (score <= 4) return 'Media';
+    return 'Fuerte';
+  }
+
+  // ==================== Manejar el Registro ====================
   const handleRegister = async () => {
-    // 1) Verificar que todos los campos tengan valores
+    // Validar campos vacíos
     if (!name || !cedula || !telefono || !direccion || !email || !password) {
       showToast('error', 'Por favor, completa todos los campos.');
       return;
     }
 
-    // 2) Validar Nombre (sin dígitos)
+    // Validar Nombre
     if (!nameRegex.test(name)) {
       showToast('error', 'El nombre solo puede contener letras y espacios.');
       return;
     }
 
-    // 3) Validar Cédula (numérica y no repetida)
+    // Validar Cédula (numérico)
     const cedulaNum = parseInt(cedula.trim(), 10);
     if (isNaN(cedulaNum)) {
       showToast('error', 'La cédula debe ser un valor numérico.');
       return;
     }
 
-    // 4) Validar Teléfono (numérico)
+    // Validar Teléfono (numérico)
     if (!phoneRegex.test(telefono)) {
       showToast('error', 'El teléfono solo puede contener dígitos.');
       return;
     }
 
-    // 5) Validar Email (regex simple)
+    // Validar Email
     if (!emailRegex.test(email.trim())) {
       showToast('error', 'El formato del correo no es válido.');
       return;
     }
 
-    // 6) Validar Password (al menos 6 caracteres, u otras condiciones)
-    if (password.length < 6) {
-      showToast('error', 'La contraseña debe tener al menos 6 caracteres.');
+    // Validar Contraseña con confirmación
+    if (password !== confirmPassword) {
+      showToast('error', 'Las contraseñas no coinciden.');
+      return;
+    }
+
+    // Validar Password con regex (según tus requisitos)
+    if (!passwordRegex.test(password)) {
+      showToast(
+        'error',
+        'La contraseña debe tener al menos 8 caracteres, ' +
+          '1 mayúscula, 1 minúscula, 1 dígito y 1 caracter especial (!@#$%^&*()_-+=).'
+      );
       return;
     }
 
     setLoading(true);
 
     try {
-      // A) Revisar si ya existe alguien con esa cédula
+      // A) Revisar si ya existe un cliente con esa cédula
       const clientesRef = collection(db, 'Clientes');
       const qClientes = query(clientesRef, where('cedula', '==', cedulaNum));
       const existing = await getDocs(qClientes);
+
       if (!existing.empty) {
         setLoading(false);
         showToast('error', 'La cédula ya está registrada con otro usuario.');
@@ -108,11 +164,14 @@ const RegisterScreen = ({ navigation }: any) => {
 
       // B) Crear usuario en Firebase Auth
       const auth = getAuth();
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
       const user = userCredential.user;
 
-      // C) Crear el documento en la colección "Clientes"
-      //    Agregamos campo "activo: true"
+      // C) Crear el doc en "Clientes" (activo: true)
       await setDoc(doc(db, 'Clientes', user.uid), {
         nombre: name.trim(),
         cedula: cedulaNum,
@@ -120,13 +179,12 @@ const RegisterScreen = ({ navigation }: any) => {
         direccion: direccion.trim(),
         email: email.trim(),
         tipo: 'cliente',
-        activo: true,             // <-- Campo activo en true
+        activo: true,
       });
 
       showToast('success', 'Registro exitoso.');
       setLoading(false);
 
-      // Redirigir a Login
       navigation.replace('Login');
     } catch (error: any) {
       setLoading(false);
@@ -137,7 +195,6 @@ const RegisterScreen = ({ navigation }: any) => {
             showToast('error', 'El correo ya está registrado.');
             break;
           case 'auth/invalid-email':
-            // Nota: normalm. no llegamos aquí por la verificación manual
             showToast('error', 'El formato del correo no es válido.');
             break;
           case 'auth/weak-password':
@@ -152,6 +209,7 @@ const RegisterScreen = ({ navigation }: any) => {
     }
   };
 
+  // ==================== Helper: mostrar Toast ====================
   const showToast = (type: 'success' | 'error', message: string) => {
     Toast.show({
       type,
@@ -161,6 +219,9 @@ const RegisterScreen = ({ navigation }: any) => {
       visibilityTime: 3000,
     });
   };
+
+  // ==================== Render ====================
+  const passwordLevel = getPasswordStrength(password);
 
   return (
     <>
@@ -220,14 +281,68 @@ const RegisterScreen = ({ navigation }: any) => {
           />
 
           {/* CONTRASEÑA */}
-          <TextInput
-            style={[globalStyles.input, styles.input]}
-            placeholder="Contraseña"
-            placeholderTextColor="#888888"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.passRow}>
+            <TextInput
+              style={[globalStyles.input, styles.inputPass]}
+              placeholder="Contraseña"
+              placeholderTextColor="#888888"
+              secureTextEntry={!showPass}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPass(!showPass)}
+            >
+              <Text style={styles.eyeButtonText}>
+                {showPass ? '🙈' : '👁'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* CONFIRMAR CONTRASEÑA */}
+          <View style={styles.passRow}>
+            <TextInput
+              style={[globalStyles.input, styles.inputPass]}
+              placeholder="Confirmar Contraseña"
+              placeholderTextColor="#888888"
+              secureTextEntry={!showPassConfirm}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassConfirm(!showPassConfirm)}
+            >
+              <Text style={styles.eyeButtonText}>
+                {showPassConfirm ? '🙈' : '👁'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Mensaje de requisitos */}
+          {password.length > 0 && (
+            <Text style={styles.passRules}>
+              La contraseña debe tener mínimo 8 caracteres, al menos 1 mayúscula,
+              1 minúscula, 1 dígito y 1 caracter especial (!@#$%^&*()_-+=).
+            </Text>
+          )}
+
+          {/* Nivel de seguridad */}
+          {password.length > 0 && (
+            <Text
+              style={[
+                styles.passLevelText,
+                passwordLevel === 'Débil'
+                  ? { color: 'red' }
+                  : passwordLevel === 'Media'
+                  ? { color: 'orange' }
+                  : { color: 'green' },
+              ]}
+            >
+              Seguridad: {passwordLevel}
+            </Text>
+          )}
 
           {loading && <ActivityIndicator size="large" color={colors.primary} />}
 
@@ -240,7 +355,7 @@ const RegisterScreen = ({ navigation }: any) => {
             <Text style={globalStyles.primaryButtonText}>Registrarse</Text>
           </TouchableOpacity>
 
-          {/* YA TIENES CUENTA? LOGIN */}
+          {/* ¿YA TIENES CUENTA? LOGIN */}
           <View style={styles.loginContainer}>
             <Text style={styles.loginText}>¿Ya tienes cuenta?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -254,7 +369,6 @@ const RegisterScreen = ({ navigation }: any) => {
   );
 };
 
-// Estilos locales
 const styles = StyleSheet.create({
   outerContainer: {
     flexGrow: 1,
@@ -289,6 +403,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     height: 50,
     width: '100%',
+  },
+  passRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  inputPass: {
+    flex: 1,
+    marginRight: 8,
+  },
+  eyeButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#eee',
+  },
+  eyeButtonText: {
+    fontSize: 18,
+  },
+  passRules: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 8,
+  },
+  passLevelText: {
+    fontSize: 14,
+    marginBottom: 12,
+    fontWeight: 'bold',
   },
   loginContainer: {
     flexDirection: 'row',

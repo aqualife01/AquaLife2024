@@ -1,3 +1,5 @@
+// OrdersAdminScreen.tsx
+
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -7,6 +9,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  Platform,
+  Alert, // Import estático (usado en mobile)
 } from 'react-native';
 import {
   collection,
@@ -15,21 +19,23 @@ import {
   orderBy,
   doc,
   updateDoc,
+  getDocs,
 } from 'firebase/firestore';
-import { db } from '../../firebaseConfig'; // Ajusta la ruta
+import { db } from '../../firebaseConfig'; // Ajusta la ruta según tu proyecto
 import { globalStyles, colors } from '../styles/globalStyles';
 
+// ===== Interfaces / tipos =====
 interface Pedido {
   id: string;
-  numeroPedido?: number;  
+  numeroPedido?: number;
   clienteId: string;
-  fecha: string;          // "2025-01-15"
+  fecha: string;         
   hora: string;
   cantidadConAsa: number;
   cantidadSinAsa: number;
   costoUnitario: number;
   total: number;
-  estado: string;         // "pendiente", "listo", "entregado"
+  estado: string;         
   empleadoAsignadoId: string;
   observaciones: string;
 }
@@ -41,138 +47,230 @@ interface Cliente {
   telefono?: string;
 }
 
-// Formatea Nº de pedido (ej. 7 → "0007")
+// Para items en la FlatList
+type ListItem =
+  | { type: 'header'; fecha: string }
+  | { type: 'pedido'; data: Pedido };
+
+// ===== Helper para mostrar alert en Web/Nativo =====
+function showMessage(title: string, message: string) {
+  if (Platform.OS === 'web') {
+    // En entorno web => window.alert
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    // En Android/iOS => Alert.alert
+    Alert.alert(title, message);
+  }
+}
+
+// ===== Funciones de formato =====
 function formatOrderNumber(num: number): string {
   return num.toString().padStart(4, '0');
 }
 
-// Formatea fecha "AAAA-MM-DD" → "DD/MM/AAAA"
 function formatFecha(fechaISO: string): string {
   const [year, month, day] = fechaISO.split('-');
   return `${day}/${month}/${year}`;
 }
 
-// Asigna prioridad a cada estado
 function getEstadoPriority(estado: string): number {
   switch (estado) {
-    case 'pendiente':
-      return 1;
-    case 'listo':
-      return 2;
-    case 'entregado':
-      return 3;
-    default:
-      return 99;
+    case 'pendiente': return 1;
+    case 'listo':     return 2;
+    case 'entregado': return 3;
+    default:          return 99;
   }
 }
 
-// Para agrupar por fecha, tenemos dos tipos de items en la lista
-type ListItem =
-  | { type: 'header'; fecha: string }
-  | { type: 'pedido'; data: Pedido };
-
+// ===== Componente principal =====
 const OrdersAdminScreen = () => {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [clientesMap, setClientesMap] = useState<Record<string, Cliente>>({});
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Filtro local (nº pedido / nombre cliente)
   const [searchText, setSearchText] = useState<string>('');
 
+  // Inventario de Sellos/Tapas
+  const [sellosCantidad, setSellosCantidad] = useState<number>(9999);
+  const [tapasCantidad, setTapasCantidad] = useState<number>(9999);
+  // Opcional: IDs de cada doc en Inventario para actualizarlos si lo deseas
+  const [sellosDocId, setSellosDocId] = useState<string>('');
+  const [tapasDocId, setTapasDocId] = useState<string>('');
+
+  // ===== 1) Suscribirse a la colección "Pedidos" =====
   useEffect(() => {
-    // Query a "Pedidos" ordenados por fecha desc (nivel Firestore),
-    // pero refinamos la ordenación manualmente con prioridad + numeroPedido.
-    const q = query(collection(db, 'Pedidos'), orderBy('fecha', 'desc'));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const pedidosData: Pedido[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<Pedido, 'id'>),
-        }));
+    const qPedidos = query(collection(db, 'Pedidos'), orderBy('fecha', 'desc'));
+    const unsubscribe = onSnapshot(qPedidos, (snapshot) => {
+      const pedidosData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Pedido, 'id'>),
+      }));
 
-        // Ordenar:
-        // 1) prioridad por estado (pendiente→1, listo→2, entregado→3)
-        // 2) si ambos son 'entregado', ordenar por numeroPedido desc
-        // 3) si mismo estado, se ordena por fecha desc
-        pedidosData.sort((a, b) => {
-          const priorityA = getEstadoPriority(a.estado);
-          const priorityB = getEstadoPriority(b.estado);
+      // Orden adicional (estado + numPedido/fecha)
+      pedidosData.sort((a, b) => {
+        const priorityA = getEstadoPriority(a.estado);
+        const priorityB = getEstadoPriority(b.estado);
 
-          if (priorityA !== priorityB) {
-            // Diferente estado => orden por prioridad
-            return priorityA - priorityB;
-          }
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+        // mismo estado
+        if (priorityA === 3) {
+          // "entregado" => desc por numeroPedido
+          const numA = a.numeroPedido || 0;
+          const numB = b.numeroPedido || 0;
+          return numB - numA;
+        } else {
+          // "pendiente" o "listo" => desc por fecha
+          const dateA = new Date(a.fecha).getTime();
+          const dateB = new Date(b.fecha).getTime();
+          return dateB - dateA;
+        }
+      });
 
-          // Mismo estado
-          if (priorityA === 3) {
-            // Si ambos están en "entregado", ordenamos por numeroPedido desc
-            const numA = a.numeroPedido || 0;
-            const numB = b.numeroPedido || 0;
-            return numB - numA; // desc
-          } else {
-            // Si mismo estado pero no es 'entregado' (pendiente o listo),
-            // ordenamos por fecha desc
-            const dateA = new Date(a.fecha).getTime();
-            const dateB = new Date(b.fecha).getTime();
-            return dateB - dateA;
-          }
-        });
-
-        setPedidos(pedidosData);
-        setLoading(false);
-      },
-      (error) => {
-        console.error('Error al obtener pedidos:', error);
-        setLoading(false);
-      }
-    );
+      setPedidos(pedidosData);
+      setLoading(false);
+    },
+    (error) => {
+      console.error('Error al obtener pedidos:', error);
+      setLoading(false);
+    });
 
     return () => unsubscribe();
   }, []);
 
+  // ===== 2) Suscribirse a "Clientes" para mapear clienteId =====
   useEffect(() => {
-    // Suscripción a "Clientes" para luego mapear clienteId
-    const unsubscribe = onSnapshot(collection(db, 'Clientes'), (snapshot) => {
+    const unsub = onSnapshot(collection(db, 'Clientes'), (snapshot) => {
       const map: Record<string, Cliente> = {};
       snapshot.forEach((doc) => {
         map[doc.id] = doc.data() as Cliente;
       });
       setClientesMap(map);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  // Actualizar estado del pedido
+  // ===== 3) Cargar Inventario =====
+  useEffect(() => {
+    async function cargarInventario() {
+      try {
+        const snap = await getDocs(collection(db, 'Inventario'));
+        let sellos = 9999;
+        let tapas = 9999;
+        let sellosId = '';
+        let tapasId = '';
+
+        snap.forEach((docu) => {
+          const data = docu.data() as { nombre?: string; cantidad?: number };
+          if (data.nombre === 'Sellos de seguridad') {
+            sellos = data.cantidad ?? 0;
+            sellosId = docu.id;
+          } else if (data.nombre === 'Tapas plásticas') {
+            tapas = data.cantidad ?? 0;
+            tapasId = docu.id;
+          }
+        });
+
+        setSellosCantidad(sellos);
+        setTapasCantidad(tapas);
+        setSellosDocId(sellosId);
+        setTapasDocId(tapasId);
+      } catch (err) {
+        console.error('Error al cargar inventario:', err);
+      }
+    }
+    cargarInventario();
+  }, []);
+
+  // ===== 4) Al montar, si detectamos <200 => notificar =====
+  useEffect(() => {
+    if (sellosCantidad < 200) {
+      showMessage(
+        'Inventario bajo',
+        `¡Atención! "Sellos de seguridad" por debajo de 200 (${sellosCantidad}).`
+      );
+    }
+    if (tapasCantidad < 200) {
+      showMessage(
+        'Inventario bajo',
+        `¡Atención! "Tapas plásticas" por debajo de 200 (${tapasCantidad}).`
+      );
+    }
+  }, [sellosCantidad, tapasCantidad]);
+
+  // ===== Manejar cambio de estado de un pedido =====
   const handleChangeEstado = async (pedidoId: string, nuevoEstado: string) => {
     try {
+      const pedido = pedidos.find((p) => p.id === pedidoId);
+      if (!pedido) return;
+
+      const totalBotellones = pedido.cantidadConAsa + pedido.cantidadSinAsa;
+
+      // Si marcamos como "listo", chequeamos inventario
+      if (nuevoEstado === 'listo') {
+        if (sellosCantidad < totalBotellones || tapasCantidad < totalBotellones) {
+          showMessage(
+            'Inventario insuficiente',
+            'No hay suficientes sellos o tapas para completar este pedido.'
+          );
+          return; // no cambia estado
+        } else {
+          // Descontar
+          const nuevosSellos = sellosCantidad - totalBotellones;
+          const nuevasTapas = tapasCantidad - totalBotellones;
+
+          // Actualizar en Firestore (opcional)
+          if (sellosDocId) {
+            const sellosRef = doc(db, 'Inventario', sellosDocId);
+            await updateDoc(sellosRef, { cantidad: nuevosSellos });
+          }
+          if (tapasDocId) {
+            const tapasRef = doc(db, 'Inventario', tapasDocId);
+            await updateDoc(tapasRef, { cantidad: nuevasTapas });
+          }
+
+          // Actualizar estado local
+          setSellosCantidad(nuevosSellos);
+          setTapasCantidad(nuevasTapas);
+
+          showMessage(
+            'Inventario actualizado',
+            `Se han descontado ${totalBotellones} sellos y tapas.`
+          );
+        }
+      }
+
+      // Ahora sí, actualizar el estado del pedido
       const pedidoRef = doc(db, 'Pedidos', pedidoId);
       await updateDoc(pedidoRef, { estado: nuevoEstado });
+
       console.log(`Estado del pedido ${pedidoId} → ${nuevoEstado}`);
     } catch (error) {
-      console.error('Error actualizando estado:', error);
+      console.error('Error al cambiar estado:', error);
     }
   };
 
-  // Filtrado local (por número de pedido o nombre de cliente)
+  // ===== Filtrado local (pedidoID o nombreCliente) =====
   const filteredPedidos = pedidos.filter((item) => {
     const clienteInfo = clientesMap[item.clienteId];
     const nombreCliente = clienteInfo?.nombre?.toLowerCase() || '';
     const numeroString = item.numeroPedido
       ? formatOrderNumber(item.numeroPedido)
-      : item.id; // fallback al doc.id
+      : item.id;
     const texto = searchText.toLowerCase();
+
     return (
       numeroString.toLowerCase().includes(texto) ||
       nombreCliente.includes(texto)
     );
   });
 
-  // Convertimos a estructura con "header" cada vez que cambia la fecha
+  // Agrupar por fecha => construimos listData
   const listData: ListItem[] = [];
   let currentFecha = '';
-  for (let i = 0; i < filteredPedidos.length; i++) {
-    const ped = filteredPedidos[i];
-    // Si la fecha cambió, insertamos un header
+  for (const ped of filteredPedidos) {
     if (ped.fecha !== currentFecha) {
       currentFecha = ped.fecha;
       listData.push({ type: 'header', fecha: currentFecha });
@@ -183,7 +281,6 @@ const OrdersAdminScreen = () => {
   // Render de cada item
   const renderItem = ({ item }: { item: ListItem }) => {
     if (item.type === 'header') {
-      // Encabezado por fecha
       const fechaStr = formatFecha(item.fecha);
       return (
         <View style={styles.headerContainer}>
@@ -191,20 +288,15 @@ const OrdersAdminScreen = () => {
         </View>
       );
     } else {
-      // Pedido real
       const pedido = item.data;
-      const clienteInfo = clientesMap[pedido.clienteId];
+      const clienteInfo = clientesMap[pedido.clienteId] || {};
+      const clienteNombre = (clienteInfo.nombre || 'Cliente sin nombre').toUpperCase();
+      const clienteDireccion = (clienteInfo.direccion || 'Sin dirección').toUpperCase();
 
-      // Convertimos a mayúsculas
-      const clienteNombre = (clienteInfo?.nombre || 'Cliente sin nombre').toUpperCase();
-      const clienteDireccion = (clienteInfo?.direccion || 'Sin dirección').toUpperCase();
-
-      // Estado → mostramos botones
       const mostrarBotonListo = pedido.estado === 'pendiente';
       const mostrarBotonEntregado =
         pedido.estado === 'pendiente' || pedido.estado === 'listo';
 
-      // Ej: "Pedido Nº: 0007"
       const tituloPedido = pedido.numeroPedido
         ? `Pedido Nº: ${formatOrderNumber(pedido.numeroPedido)}`
         : `Pedido ID: ${pedido.id}`;
@@ -290,7 +382,7 @@ const OrdersAdminScreen = () => {
     }
   };
 
-  // Loading
+  // Mostrar loading
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -300,6 +392,7 @@ const OrdersAdminScreen = () => {
     );
   }
 
+  // Render final
   return (
     <View style={styles.container}>
       <Text style={globalStyles.headerText}>Historial de Pedidos</Text>
@@ -324,7 +417,6 @@ const OrdersAdminScreen = () => {
           }}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
-          numColumns={1}
         />
       )}
     </View>
@@ -333,11 +425,11 @@ const OrdersAdminScreen = () => {
 
 export default OrdersAdminScreen;
 
+// ===== Estilos =====
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    // Ajusta padding si quieres más/menos espacio lateral
   },
   text: {
     fontSize: 16,
@@ -369,13 +461,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   card: {
-    width: '250%',
+    width: '250%', 
     alignSelf: 'center',
     backgroundColor: colors.primaryShades[50],
     padding: 16,
     borderRadius: 8,
     marginBottom: 12,
-    // Sombra
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
