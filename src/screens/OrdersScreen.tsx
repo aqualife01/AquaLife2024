@@ -234,8 +234,8 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             style={styles.picker}
           >
             <Picker.Item label="Alta" value="alta" />
-            <Picker.Item label="Media" value="media" />
-            <Picker.Item label="Baja" value="baja" />
+            <Picker.Item label="Normal" value="normal" />
+           
           </Picker>
 
           {/* Si la prioridad es alta, mostramos un mensaje explicando el costo extra */}
