@@ -8,6 +8,7 @@ import {
   StyleSheet,
   FlatList,
   ScrollView,
+  Alert,
 } from 'react-native';
 import {
   collection,
@@ -32,8 +33,10 @@ interface UsuarioDoc {
   email?: string;
   telefono?: string;
   direccion?: string;
+  cedula?: string; // Nuevo campo
   password?: string;
   tipo?: string; // "admin"
+  activo?: boolean; // Nuevo campo
 }
 
 // Interfaz para documentos en la colección "clientes"
@@ -43,8 +46,10 @@ interface ClienteDoc {
   email?: string;
   telefono?: string;
   direccion?: string;
+  cedula?: string; // Nuevo campo
   password?: string;
   tipo?: string; // "cliente"
+  activo?: boolean; // Nuevo campo
 }
 
 // Para manejar el item seleccionado y saber si es "usuario" o "cliente"
@@ -67,6 +72,7 @@ const CreateUserScreen = () => {
   // Control del formulario principal (crear usuario/cliente)
   const [showForm, setShowForm] = useState(false);
   const [nombre, setNombre] = useState('');
+  const [cedula, setCedula] = useState(''); // Nuevo estado para cédula
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
   const [direccion, setDireccion] = useState('');
@@ -118,7 +124,7 @@ const CreateUserScreen = () => {
 
   // Crear nuevo user/cliente TANTO en Auth como en Firestore
   const handleCreate = async () => {
-    if (!nombre || !email || !telefono || !direccion) {
+    if (!nombre || !cedula || !email || !telefono || !direccion) {
       showToast('error', 'Completa todos los campos requeridos.');
       return;
     }
@@ -151,17 +157,20 @@ const CreateUserScreen = () => {
       // setDoc para que el doc ID en Firestore coincida con el UID de Auth
       await setDoc(doc(db, collectionName, user.uid), {
         nombre,
+        cedula,         // Nuevo campo cédula
         email,
         telefono,
         direccion,
-        password, // en texto plano, no recomendable
+        password,       // en texto plano, no recomendable
         tipo: valorTipo,
+        activo: true,   // Se añade el campo "activo" con valor true
       });
 
       showToast('success', `Se creó un ${valorTipo} correctamente en Auth y Firestore.`);
 
       // Limpiar campos
       setNombre('');
+      setCedula('');
       setEmail('');
       setTelefono('');
       setDireccion('');
@@ -176,6 +185,19 @@ const CreateUserScreen = () => {
     setLoading(false);
   };
 
+  // Función para mostrar reporte de usuarios
+  const handleReport = () => {
+    let report = 'Reporte de Usuarios:\n\n';
+    if (listaUsuarios.length === 0) {
+      report += 'No hay usuarios registrados.';
+    } else {
+      listaUsuarios.forEach((user, index) => {
+        report += `${index + 1}. Nombre: ${user.nombre}\n   Email: ${user.email || 'N/A'}\n   Teléfono: ${user.telefono || 'N/A'}\n   Dirección: ${user.direccion || 'N/A'}\n   Cédula: ${user.cedula || 'N/A'}\n   Tipo: ${user.tipo || 'N/A'}\n   Activo: ${user.activo ? 'Sí' : 'No'}\n\n`;
+      });
+    }
+    Alert.alert('Reporte de Usuarios', report);
+  };
+
   // Mostrar toast
   const showToast = (type: 'success' | 'error', message: string) => {
     Toast.show({
@@ -188,43 +210,32 @@ const CreateUserScreen = () => {
   };
 
   // ======== Selección de item (mostrar botones de acción) ==========
-
-  // al pulsar un item en la lista de usuarios
   const handleSelectUsuario = (id: string) => {
-    // Si ya estaba seleccionado, al pulsar de nuevo lo deseleccionamos
     if (selectedItem?.id === id && selectedItem.type === 'usuario') {
       setSelectedItem(null);
     } else {
       setSelectedItem({ id, type: 'usuario' });
     }
-    // Cerrar formulario de edición
     setShowEditForm(false);
   };
 
-  // al pulsar un item en la lista de clientes
   const handleSelectCliente = (id: string) => {
     if (selectedItem?.id === id && selectedItem.type === 'cliente') {
       setSelectedItem(null);
     } else {
       setSelectedItem({ id, type: 'cliente' });
     }
-    // Cerrar formulario de edición
     setShowEditForm(false);
   };
 
   // ======== Acciones en la sección de botones ==========
-  
-  // Botón "Cancelar": cierra la selección
   const handleCancelSelection = () => {
     setSelectedItem(null);
     setShowEditForm(false);
   };
 
-  // "Modificar"
-  // Abre un formulario para modificar nombre, telefono, direccion
   const handleModify = async () => {
     if (!selectedItem) return;
-    // 1) Buscar el doc en la lista correspondiente
     let itemToEdit: UsuarioDoc | ClienteDoc | undefined;
 
     if (selectedItem.type === 'usuario') {
@@ -238,16 +249,12 @@ const CreateUserScreen = () => {
       return;
     }
 
-    // 2) Rellenar estados de edición
     setEditNombre(itemToEdit.nombre);
     setEditTelefono(itemToEdit.telefono || '');
     setEditDireccion(itemToEdit.direccion || '');
-
-    // 3) Mostrar formulario de edición
     setShowEditForm(true);
   };
 
-  // Botón "Guardar" en el formulario de edición
   const handleSaveEdit = async () => {
     if (!selectedItem) return;
     const colName = selectedItem.type === 'usuario' ? 'usuarios' : 'Clientes';
@@ -259,7 +266,6 @@ const CreateUserScreen = () => {
         direccion: editDireccion,
       });
       showToast('success', 'Datos modificados correctamente.');
-      // Cerrar selección y formulario
       setSelectedItem(null);
       setShowEditForm(false);
     } catch (err) {
@@ -268,7 +274,6 @@ const CreateUserScreen = () => {
     }
   };
 
-  // "Eliminar" (Firestore) 
   const handleDelete = async () => {
     if (!selectedItem) return;
     const colName = selectedItem.type === 'usuario' ? 'usuarios' : 'Clientes';
@@ -284,7 +289,6 @@ const CreateUserScreen = () => {
     }
   };
 
-  // "Desactivar" (podrías setear un campo "activo: false")
   const handleDeactivate = async () => {
     if (!selectedItem) return;
     const colName = selectedItem.type === 'usuario' ? 'usuarios' : 'Clientes';
@@ -326,7 +330,6 @@ const CreateUserScreen = () => {
             <TouchableOpacity style={styles.actionButton} onPress={handleDeactivate}>
               <Text style={styles.actionButtonText}>Desactivar</Text>
             </TouchableOpacity>
-            {/* Botón Cancelar */}
             <TouchableOpacity style={styles.actionButton} onPress={handleCancelSelection}>
               <Text style={styles.actionButtonText}>Cancelar</Text>
             </TouchableOpacity>
@@ -360,7 +363,6 @@ const CreateUserScreen = () => {
             <TouchableOpacity style={styles.actionButton} onPress={handleDeactivate}>
               <Text style={styles.actionButtonText}>Desactivar</Text>
             </TouchableOpacity>
-            {/* Botón Cancelar */}
             <TouchableOpacity style={styles.actionButton} onPress={handleCancelSelection}>
               <Text style={styles.actionButtonText}>Cancelar</Text>
             </TouchableOpacity>
@@ -411,7 +413,6 @@ const CreateUserScreen = () => {
         style={styles.addButton}
         onPress={() => {
           setShowForm(!showForm);
-          // Cerrar la selección si está abierta
           setSelectedItem(null);
           setShowEditForm(false);
         }}
@@ -433,6 +434,12 @@ const CreateUserScreen = () => {
             placeholder="Nombre completo"
             value={nombre}
             onChangeText={setNombre}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Cédula"
+            value={cedula}
+            onChangeText={setCedula}
           />
           <TextInput
             style={styles.input}
@@ -542,6 +549,11 @@ const CreateUserScreen = () => {
           )}
         </View>
       </View>
+
+      {/* Botón flotante de Reporte en la esquina inferior derecha */}
+      <TouchableOpacity style={styles.fabReport} onPress={handleReport}>
+        <Text style={styles.fabReportText}>Reporte</Text>
+      </TouchableOpacity>
 
       <Toast />
     </View>
@@ -668,7 +680,7 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     flexDirection: 'row',
-    justifyContent: 'flex-end', // se agrupan a la derecha
+    justifyContent: 'flex-end',
     marginTop: 6,
   },
   actionButton: {
@@ -683,7 +695,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  // Formulario de edición
   editFormContainer: {
     backgroundColor: '#fff',
     borderRadius: 8,
@@ -695,5 +706,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
     textAlign: 'center',
+  },
+  // Botón flotante de Reporte
+  fabReport: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: colors.secondary,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 30,
+    elevation: 5,
+  },
+  fabReportText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });

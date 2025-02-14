@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; 
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { db, auth } from '../../firebaseConfig'; // Asegúrate de que la ruta sea correcta
@@ -13,6 +13,8 @@ const DashboardScreen = () => {
     correo: '',
     rol: '',
   });
+  // Estado para mostrar u ocultar la sección de cambiar contraseña
+  const [showPassword, setShowPassword] = useState(false);
 
   // Listener en tiempo real para usuarios y clientes
   useEffect(() => {
@@ -117,16 +119,25 @@ const DashboardScreen = () => {
         </View>
       </View>
 
-      {/* Cambio de Contraseña */}
-      <View style={styles.passwordBox}>
-        <Text style={styles.infoTitle}>Cambiar Contraseña</Text>
-        <TextInput style={styles.input} placeholder="Contraseña Actual" secureTextEntry />
-        <TextInput style={styles.input} placeholder="Nueva Contraseña" secureTextEntry />
-        <TextInput style={styles.input} placeholder="Confirmar Contraseña" secureTextEntry />
-        <TouchableOpacity style={styles.button}>
-          <Text style={styles.buttonText}>Guardar Cambios</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Botón para mostrar/ocultar el cambio de contraseña */}
+      <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.toggleButton}>
+        <Text style={styles.toggleButtonText}>
+          {showPassword ? 'Ocultar Cambio de Contraseña' : 'Mostrar Cambio de Contraseña'}
+        </Text>
+      </TouchableOpacity>
+
+      {/* Sección de Cambio de Contraseña, renderizada condicionalmente */}
+      {showPassword && (
+        <View style={styles.passwordBox}>
+          <Text style={styles.infoTitle}>Cambiar Contraseña</Text>
+          <TextInput style={styles.input} placeholder="Contraseña Actual" secureTextEntry />
+          <TextInput style={styles.input} placeholder="Nueva Contraseña" secureTextEntry />
+          <TextInput style={styles.input} placeholder="Confirmar Contraseña" secureTextEntry />
+          <TouchableOpacity style={styles.button}>
+            <Text style={styles.buttonText}>Guardar Cambios</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -210,6 +221,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 4,
+    marginBottom: 20,
   },
   input: {
     backgroundColor: '#F5F5F5',
@@ -226,6 +238,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  toggleButton: {
+    backgroundColor: '#2B7A78',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  toggleButtonText: {
     color: '#FFF',
     fontWeight: 'bold',
   },

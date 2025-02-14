@@ -28,15 +28,22 @@ const CustomDrawerContent: React.FC<Props> = (props) => {
         <Text style={styles.title}>AquaLife</Text>
       </View>
 
-      {/* Opciones comunes para clientes y admins */}
+      {/* Opciones comunes para clientes y admins 
       <DrawerItem
         label="Usuario"
         onPress={() => navigation.navigate('User')}
-      />
+      />*/}
 {userType !== 'admin' && (
         <DrawerItem
           label="Dashboard"
           onPress={() => navigation.navigate('dashboard')}
+        />
+      )}
+
+{userType !== 'admin' && (
+        <DrawerItem
+          label="Usuario"
+          onPress={() => navigation.navigate('User')}
         />
       )}
 
@@ -55,11 +62,11 @@ const CustomDrawerContent: React.FC<Props> = (props) => {
             onPress={() => navigation.navigate('Dashboard')}
           />
           <DrawerItem
-            label="lista de usuarios"
+            label="Lista de usuarios"
             onPress={() => navigation.navigate('Create')}
           />
           <DrawerItem
-            label="Historial de Pedidos"
+            label=" Pedidos"
             onPress={() => navigation.navigate('OrdersA')}
           />
           <DrawerItem
@@ -74,14 +81,7 @@ const CustomDrawerContent: React.FC<Props> = (props) => {
             label="Inventario"
             onPress={() => navigation.navigate('Inventory')}
           />
-          <DrawerItem
-            label="Mantenimiento"
-            onPress={() => navigation.navigate('Maintenance')}
-          />
-          <DrawerItem
-            label="Facturas"
-            onPress={() => navigation.navigate('Invoices')}
-          />
+      
           <DrawerItem
             label="Proveedores"
             onPress={() => navigation.navigate('Providers')}

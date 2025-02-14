@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,44 +12,92 @@ import { Picker } from "@react-native-picker/picker";
 import { globalStyles, colors } from "../styles/globalStyles";
 
 // Firebase
-import { db, auth } from "../../firebaseConfig"; // Ajusta la ruta según tu proyecto
+import { db, auth } from "../../firebaseConfig";
 import { collection, addDoc } from "firebase/firestore";
 
 // Importa tu función para obtener número correlativo
-import { getNextOrderNumber } from "../components/getNextOrderNumber"; // Ajusta la ruta
+import { getNextOrderNumber } from "../components/getNextOrderNumber";
 
+// Definimos la interfaz del pedido
 interface Order {
-  withHandle: number;     // Botellones con asa
-  withoutHandle: number;  // Botellones sin asa
+  withHandle: number;
+  withoutHandle: number;
   type: "intercambio" | "llenado";
   comments: string;
-  priority: "alta" | "media" | "baja";
+  priority: "alta" | "normal" ;
 }
 
 const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-  // Costo unitario de cada botellón
-  const COST_PER_BOTTLE = 0.5;
-
-  // Referencia al ScrollView para hacer scroll al final
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Estado local que guardará la información del pedido
+  // Estado para los datos del pedido
   const [order, setOrder] = useState<Order>({
     withHandle: 0,
     withoutHandle: 0,
     type: "intercambio",
     comments: "",
-    priority: "media",
+    priority: "normal",
   });
-
   const [isConfirmed, setIsConfirmed] = useState(false);
+
+  // Estado para la tasa del dólar
+  const [dolarRate, setDolarRate] = useState<number | null>(null);
+
+  // Estado para la fecha de hoy en formato YYYY-MM-DD
+  const [todayDate, setTodayDate] = useState<string>("");
+
+  // **Estado para el costo unitario** por botellón
+  // Por defecto es 0.5, pero subirá a 0.7 si la prioridad es alta
+  const [costPerBottle, setCostPerBottle] = useState(0.5);
+
+  // Al montar, definimos la fecha de hoy
+  useEffect(() => {
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0];
+    setTodayDate(dateStr);
+  }, []);
+
+  // useEffect para traer la tasa cada hora (ajusta la URL a tu entorno)
+  useEffect(() => {
+    const fetchDolarRate = async () => {
+      try {
+        // Ajusta la URL según tu entorno
+        // - Emulador Android: "http://10.0.2.2:5000/api/tasa"
+        // - iOS Simulator: "http://localhost:5000/api/tasa"
+        // - Web: "http://127.0.0.1:5000/api/tasa"
+        const response = await fetch("http://127.0.0.1:5000/api/tasa");
+        if (!response.ok) {
+          throw new Error("Error en la respuesta de la API");
+        }
+        const data = await response.json();
+        console.log("API Response:", data); 
+        setDolarRate(data.tasa);
+      } catch (error) {
+        console.error("Error fetching dolar rate:", error);
+      }
+    };
+
+    fetchDolarRate();
+    const interval = setInterval(fetchDolarRate, 3600000); // Actualizar cada hora
+    return () => clearInterval(interval);
+  }, []);
 
   // Maneja cambios en los campos del pedido
   const handleChange = <T extends keyof Order>(field: T, value: Order[T]) => {
     setOrder((prev) => ({ ...prev, [field]: value }));
+
+    // Si el campo que cambia es "priority" y el valor es "alta", subimos el costo a 0.7
+    // En caso contrario, vuelve a 0.5
+    if (field === "priority") {
+      if (value === "alta") {
+        setCostPerBottle(0.7);
+      } else {
+        setCostPerBottle(0.5);
+      }
+    }
   };
 
-  // Cuando se confirma, mostramos resumen
+  // Confirmar pedido (mostrar resumen)
   const handleConfirm = () => {
     const totalBottles = order.withHandle + order.withoutHandle;
     if (totalBottles === 0) {
@@ -60,26 +108,26 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       return;
     }
     setIsConfirmed(true);
-    // Desplazarse al final del resumen
+    // Desplazamos el scroll al final para mostrar el resumen
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
   };
 
-  // Calcula el costo total en base a la suma de botellones con y sin asa
+  // Calculamos el total de botellones y el costo total
   const totalBottles = order.withHandle + order.withoutHandle;
-  const totalPrice = totalBottles * COST_PER_BOTTLE;
+  const totalPrice = totalBottles * costPerBottle;
 
+  // Descripción del tipo de pedido
   const getTypeDescription = (type: Order["type"]) => {
     return type === "intercambio"
       ? "Sus botellones serán cambiados por unos llenos."
       : "Sus botellones serán tratados, desinfectados y estarán óptimos para su entrega.";
   };
 
-  // Crea el pedido en la colección "Pedidos" de Firestore, asignando numeroPedido
+  // Guardar el pedido en Firestore
   const handleCreateOrderInFirestore = async () => {
     try {
-      // Verifica si hay un usuario logueado
       const user = auth.currentUser;
       if (!user) {
         Alert.alert(
@@ -88,35 +136,30 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         );
         return;
       }
-
-      // Prepara fecha y hora
       const now = new Date();
-      const fecha = now.toISOString().split("T")[0]; // yyyy-mm-dd
-      const hora = now.toTimeString().split(" ")[0]; // HH:MM:SS
-
-      // Primero obtenemos el número correlativo
+      const fecha = now.toISOString().split("T")[0];
+      const hora = now.toTimeString().split(" ")[0];
       const numeroPedido = await getNextOrderNumber(db);
 
-      // Construimos el objeto del pedido
       const nuevoPedido = {
-        clienteId: user.uid,       // UID del usuario autenticado
+        clienteId: user.uid,
         fecha,
         hora,
         cantidadConAsa: order.withHandle,
         cantidadSinAsa: order.withoutHandle,
-        costoUnitario: COST_PER_BOTTLE,
+        // Guardamos el costo unitario según la prioridad elegida
+        costoUnitario: costPerBottle,
         total: totalPrice,
         estado: "pendiente",
-        empleadoAsignadoId: "abc123",  // Ejemplo
+        empleadoAsignadoId: "abc123", // Ajusta según tu lógica
         observaciones: order.comments,
-        numeroPedido: numeroPedido    // El nuevo correlativo
+        numeroPedido: numeroPedido,
       };
 
-      // Guardar en la colección "Pedidos"
       await addDoc(collection(db, "Pedidos"), nuevoPedido);
 
       Alert.alert("Éxito", "Tu pedido ha sido generado correctamente.");
-      navigation.goBack(); 
+      navigation.goBack();
     } catch (error) {
       console.error("Error al crear pedido:", error);
       Alert.alert("Error", "No se pudo crear el pedido. Intenta de nuevo.");
@@ -126,10 +169,18 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   return (
     <View style={styles.outerContainer}>
       <ScrollView contentContainerStyle={styles.scrollContainer} ref={scrollViewRef}>
+        
+        {/* Tasa del día con fecha */}
+        <Text style={globalStyles.headerText}>
+          Tasa del día ({todayDate}):{" "}
+          <Text style={{ fontWeight: "bold", color: colors.primary }}>
+            {dolarRate ? `$${dolarRate.toFixed(2)}` : "Cargando..."}
+          </Text>
+        </Text>
+
         <View style={styles.card}>
           <Text style={globalStyles.headerText}>Generar Pedido</Text>
 
-          {/* BOTELLONES CON ASA */}
           <Text style={globalStyles.title}>Botellones con Asa:</Text>
           <TextInput
             style={globalStyles.input}
@@ -140,7 +191,6 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             }
           />
 
-          {/* BOTELLONES SIN ASA */}
           <Text style={globalStyles.title}>Botellones sin Asa:</Text>
           <TextInput
             style={globalStyles.input}
@@ -151,7 +201,6 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             }
           />
 
-          {/* TIPO DE PEDIDO */}
           <Text style={globalStyles.title}>Tipo de Pedido:</Text>
           <Picker
             selectedValue={order.type}
@@ -167,7 +216,6 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             {getTypeDescription(order.type)}
           </Text>
 
-          {/* COMENTARIOS */}
           <Text style={globalStyles.title}>Comentarios:</Text>
           <TextInput
             style={globalStyles.input}
@@ -177,7 +225,6 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             onChangeText={(text) => handleChange("comments", text)}
           />
 
-          {/* PRIORIDAD */}
           <Text style={globalStyles.title}>Nivel de Prioridad:</Text>
           <Picker
             selectedValue={order.priority}
@@ -191,21 +238,25 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <Picker.Item label="Baja" value="baja" />
           </Picker>
 
-          {/* COSTO TOTAL */}
+          {/* Si la prioridad es alta, mostramos un mensaje explicando el costo extra */}
+          {order.priority === "alta" && (
+            <Text style={styles.alertText}>
+              Con prioridad alta, el costo por botellón es de $0.70
+            </Text>
+          )}
+
           <Text style={globalStyles.title}>
-            Costo Total:{' '}
-            <Text style={{ fontWeight: 'bold', color: colors.primary }}>
+            Costo Total:{" "}
+            <Text style={{ fontWeight: "bold", color: colors.primary }}>
               ${totalPrice.toFixed(2)}
             </Text>
           </Text>
 
-          {/* BOTÓN DE CONFIRMAR (muestra el resumen) */}
           <TouchableOpacity style={globalStyles.primaryButton} onPress={handleConfirm}>
             <Text style={globalStyles.primaryButtonText}>Confirmar</Text>
           </TouchableOpacity>
         </View>
 
-        {/* RESUMEN DEL PEDIDO (sólo se ve si está confirmado) */}
         {isConfirmed && (
           <View style={styles.summaryContainer}>
             <Text style={globalStyles.headerText}>Resumen del Pedido:</Text>
@@ -215,12 +266,11 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <Text>Descripción: {getTypeDescription(order.type)}</Text>
             <Text>Comentarios: {order.comments}</Text>
             <Text>Prioridad: {order.priority}</Text>
+            {/* Se refleja el total con la tarifa ajustada si es alta */}
             <Text>
-              Total:{' '}
-              <Text style={{ fontWeight: 'bold' }}>${totalPrice.toFixed(2)}</Text>
+              Total:{" "}
+              <Text style={{ fontWeight: "bold" }}>${totalPrice.toFixed(2)}</Text>
             </Text>
-
-            {/* BOTÓN DE FACTURACIÓN (crea el pedido en Firestore) */}
             <TouchableOpacity
               style={globalStyles.primaryButton}
               onPress={handleCreateOrderInFirestore}
@@ -234,24 +284,23 @@ const OrderScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   );
 };
 
-// Estilos
 const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
     backgroundColor: colors.background,
   },
   card: {
-    width: '90%',
+    width: "90%",
     maxWidth: 400,
     backgroundColor: colors.primaryShades[50],
     borderRadius: 10,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 5,
-    alignSelf: 'center',
+    alignSelf: "center",
     marginBottom: 20,
   },
   scrollContainer: {
@@ -264,7 +313,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderRadius: 8,
     backgroundColor: colors.primaryShades[50],
-    width: '100%',
+    width: "100%",
   },
   summaryContainer: {
     marginTop: 20,
@@ -273,9 +322,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.primary,
-    width: '90%',
-    alignSelf: 'center',
-    alignItems: 'center',
+    width: "90%",
+    alignSelf: "center",
+    alignItems: "center",
+  },
+  // Mensaje si la prioridad es alta
+  alertText: {
+    color: colors.error,
+    fontStyle: "italic",
+    marginBottom: 10,
   },
 });
 

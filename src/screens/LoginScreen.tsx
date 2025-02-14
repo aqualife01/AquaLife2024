@@ -51,7 +51,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       const user = userCredential.user;
 
       // 1) Buscar al usuario en "Clientes"
-      //    Si no está, podrías buscar en "usuarios" (como en tu ejemplo).
       let userData;
       let userType;
       const clientesQuery = query(collection(db, 'Clientes'), where('email', '==', email.trim()));
@@ -87,7 +86,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       showToast('success', 'Inicio de sesión exitoso. Accediendo...');
       // Redirige según el userType
       if (userType === 'cliente' || userType === 'admin') {
-        // Ejemplo: MainDrawer
         navigation.navigate('MainDrawer', { userType });
       } else {
         showToast('error', 'Tipo de usuario desconocido.');
@@ -126,7 +124,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       showToast('error', 'El formato del correo no es válido.');
       return;
     }
-    // Intentar enviar correo de reseteo
     try {
       const auth = getAuth();
       await sendPasswordResetEmail(auth, email.trim());
@@ -149,15 +146,23 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <>
-      <View style={[styles.outerContainer]}>
+      {/* Botón en la esquina superior izquierda para ir a HomeScreen */}
+      <TouchableOpacity
+        style={styles.homeButton}
+        onPress={() => navigation.navigate('Home')}
+      >
+        <Text style={styles.homeButtonText}>Home</Text>
+      </TouchableOpacity>
+
+      <View style={styles.outerContainer}>
         <View style={styles.innerContainer}>
-          <Text style={[styles.titleText]}>
+          <Text style={styles.titleText}>
             Iniciar Sesión
           </Text>
 
           {/* EMAIL */}
           <TextInput
-            style={[styles.input]}
+            style={styles.input}
             placeholder="Email"
             placeholderTextColor="#888888"
             value={email}
@@ -168,7 +173,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
           {/* CONTRASEÑA */}
           <TextInput
-            style={[styles.input]}
+            style={styles.input}
             placeholder="Contraseña"
             placeholderTextColor="#888888"
             value={password}
@@ -197,7 +202,10 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           </View>
 
           {/* ¿Tienes problemas? (ejemplo de mensaje) */}
-          <TouchableOpacity style={styles.helpButton} onPress={() => showToast('error', 'Contacta al soporte para más ayuda.')}>
+          <TouchableOpacity
+            style={styles.helpButton}
+            onPress={() => showToast('error', 'Contacta al soporte para más ayuda.')}
+          >
             <Text style={styles.helpButtonText}>¿Tienes problemas para iniciar sesión?</Text>
           </TouchableOpacity>
         </View>
@@ -294,5 +302,18 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 12,
     textDecorationLine: 'underline',
+  },
+  homeButton: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    padding: 10,
+    backgroundColor: colors.primary,
+    borderRadius: 5,
+    zIndex: 1,
+  },
+  homeButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
